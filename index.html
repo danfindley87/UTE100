@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Ute 100 Live Tracker & Pacing Dashboard</title>
 
+  <!-- PWA Manifest & Theme -->
+  <meta name="theme-color" content="#1E3F66">
+  <link rel="manifest" href="manifest.json">
+
   <!-- Mapbox -->
   <script src="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.js"></script>
   <link href="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.css" rel="stylesheet" />
@@ -18,17 +22,20 @@
     
     #map { width: 100%; height: 100%; position: relative; transition: height 0.3s ease; }
     
-    #elevationContainer { width: 100%; height: 0%; background: white; transition: height 0.3s ease, border-color 0.3s; overflow: hidden; position: relative; }
+    #elevationContainer { width: 100%; height: 0%; background: white; transition: height 0.3s ease, border-color 0.3s; overflow: hidden; position: relative; touch-action: none; /* FIX #4: TOUCH ACTION */ }
     .chart-wrapper { position: absolute; top: 0; left: 0; right: 0; bottom: 0; padding: 15px 15px 35px 15px; box-sizing: border-box; }
     #elevationChart { width: 100%; height: 100%; display: block; }
     
-    #tableContainer { width: 100%; height: 0%; overflow-y: auto; background: #ffffff; transition: height 0.3s ease; }
-    .table-wrapper { padding: 10px; }
+    #tableContainer { width: 100%; height: 0%; overflow-y: auto; overflow-x: auto; background: #ffffff; transition: height 0.3s ease; }
+    .table-wrapper { padding: 10px; min-width: 800px; } /* Ensures table doesn't squish too much on mobile */
     
     /* Main Stats Panel */
     #infoPanel { position: absolute; top: 10px; left: 10px; background: rgba(255, 255, 255, 0.95); padding: 10px 14px; border-radius: 8px; font-size: 13px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); z-index: 999; transition: background 0.3s, color 0.3s; max-width: calc(100% - 40px); }
     #infoPanel .title { font-weight: bold; font-size: 16px; margin-bottom: 6px; color: #1E3F66; transition: color 0.3s; }
-    #lastUpdate, #averagePace, #estFinish, #climbInfo, #deltaTarget { font-size: 12px; margin-top: 3px; color: #333; transition: color 0.3s; }
+    #lastUpdate { font-size: 12px; margin-top: 3px; color: #333; transition: color 0.3s; font-weight: 500; }
+    .stale-warning { color: #f57c00 !important; font-weight: bold; }
+    .stale-danger { color: #d32f2f !important; font-weight: bold; }
+    #averagePace, #estFinish, #climbInfo, #deltaTarget { font-size: 12px; margin-top: 3px; color: #333; transition: color 0.3s; }
     
     /* Floating Bottom Navigation Menu */
     #bottomNav { position: absolute; bottom: 25px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 1000; width: 95%; max-width: 450px; justify-content: center; }
@@ -48,22 +55,20 @@
     table.pacingTable th { background-color: #1E3F66; color: white; padding: 10px 8px; position: sticky; top: 0; z-index: 10; transition: background 0.3s, color 0.3s; }
     table.pacingTable td { padding: 10px 8px; border-bottom: 1px solid #e0e0e0; transition: border-color 0.3s; vertical-align: top; }
     table.pacingTable tr:nth-child(even) { background-color: #f9fafb; transition: background 0.3s; }
-    .status-passed { color: #888; text-decoration: line-through; background-color: #f0f0f0 !important; }
+    .status-passed { color: #888; background-color: #f0f0f0 !important; }
     .status-next { color: #c62828; font-weight: bold; background-color: #ffebee !important; }
-    .badge { padding: 3px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; display: inline-block; line-height: 1.2;}
+    .badge { padding: 3px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; display: inline-block; line-height: 1.2; margin-bottom: 2px; }
     .badge-crew { background-color: #0288d1; }
     .badge-drop { background-color: #ed6c02; }
-    .badge-gear { background-color: #7b1fa2; }
-
-    /* Navigation Button inside Table */
-    .nav-link-btn { display: inline-block; margin-top: 6px; padding: 4px 10px; background-color: #e3f2fd; color: #0288d1; text-decoration: none; border-radius: 12px; font-size: 11px; font-weight: bold; border: 1px solid #0288d1; transition: all 0.2s; }
+    
+    .nav-link-btn { display: inline-block; margin-top: 6px; padding: 4px 10px; background-color: #e3f2fd; color: #0288d1; text-decoration: none; border-radius: 12px; font-size: 11px; font-weight: bold; border: 1px solid #0288d1; transition: all 0.2s; white-space: nowrap; }
     .nav-link-btn:hover { background-color: #0288d1; color: white; }
 
     /* --- DARK MODE UI STYLES --- */
     body.dark-mode { background: #121212; color: #eee; }
     body.dark-mode #infoPanel { background: rgba(30, 30, 30, 0.9); color: #eee; border: 1px solid #444; }
     body.dark-mode #infoPanel .title { color: #82b1ff; }
-    body.dark-mode #lastUpdate, body.dark-mode #averagePace, body.dark-mode #climbInfo { color: #ccc; }
+    body.dark-mode #averagePace, body.dark-mode #climbInfo { color: #ccc; }
     body.dark-mode #estFinish { color: #4caf50; }
     body.dark-mode #deltaTarget { color: #ff5252; }
     body.dark-mode #settingsMenu { background: rgba(35, 35, 35, 0.98); border-color: #555; color: #eee; }
@@ -75,7 +80,7 @@
     body.dark-mode table.pacingTable th { background-color: #222; color: #82b1ff; }
     body.dark-mode table.pacingTable td { border-bottom: 1px solid #333; }
     body.dark-mode table.pacingTable tr:nth-child(even) { background-color: #2a2a2a; }
-    body.dark-mode .status-passed { color: #666; background-color: #1a1a1a !important; }
+    body.dark-mode .status-passed { color: #888; background-color: #1a1a1a !important; }
     body.dark-mode .status-next { color: #ff8a80; background-color: #4a1c1c !important; }
     body.dark-mode .nav-link-btn { background-color: #01579b; color: #e1f5fe; border-color: #0288d1; }
     body.dark-mode .nav-link-btn:hover { background-color: #0288d1; color: white; }
@@ -84,33 +89,28 @@
 <body>
   <div id="map">
     <div id="infoPanel">
-      <div class="title">Ute 100 Tracker</div>
+      <div class="title">Ute 100 Tracker (32-Hr)</div>
       Mile: <span id="mile">0.0</span> | Elev: <span id="elev">0</span> ft | Left: <span id="remain">0</span> mi
       <div id="climbInfo">Climbed: 0 ft | To Go: 0 ft</div>
       <div id="lastUpdate">Location: Waiting for InReach...</div>
-      <div id="averagePace" style="font-weight: bold;">Overall Pace: --</div>
-      <div id="estFinish" style="font-weight: bold; color: #2e7d32;">Est Finish: --</div>
-      <div id="deltaTarget" style="font-weight: bold; color: #B22222;">Vs 30-Hr Plan: --</div>
+      <div id="averagePace" style="font-weight: bold;">Current Leg Pace: --</div>
+      <div id="estFinish" style="font-weight: bold; color: #2e7d32;">Dynamic Live ETA: --</div>
+      <div id="deltaTarget" style="font-weight: bold; color: #B22222;">Vs 32-Hr Plan: --</div>
     </div>
 
-    <!-- Floating Navigation -->
     <div id="bottomNav">
       <button class="nav-btn" id="btnSettings">⚙️ Settings</button>
       <button class="nav-btn" id="btnElevation">📊 Elevation</button>
       <button class="nav-btn" id="btnPacing">📋 Pacing</button>
     </div>
 
-    <!-- Settings Modal -->
     <div id="settingsMenu">
       <div class="settings-title">Map Controls</div>
-      
       <label style="font-size: 14px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 8px;">
         <input type="checkbox" id="toggleRadar" style="width: 16px; height: 16px;"> Weather Radar 🌧
       </label>
-      
       <label for="radarStrength" style="font-size:12px; margin-top: 10px;">Radar Opacity:</label>
       <input type="range" id="radarStrength" min="1" max="20" value="10" style="width: 100%; margin-bottom: 10px;">
-      
       <button id="toggleNight" class="settings-btn">🌙 Night Mode</button>
       <button id="toggleSat" class="settings-btn">🛰️ Satellite View</button>
       <button id="refreshRadar" class="settings-btn">🔄 Refresh Radar</button>
@@ -133,11 +133,12 @@
           <tr>
             <th>Aid Station</th>
             <th>Mile</th>
-            <th>Plan ETA (30h)</th>
-            <th>Live Projected ETA</th>
-            <th>Leg Mi</th>
-            <th>Gain/Loss</th>
-            <th>Logistics & Gear Notes</th>
+            <th>Leg Dist</th>
+            <th>32-Hr Plan ETA</th>
+            <th>Live Proj / Actual ETA</th>
+            <th>Plan Pace</th>
+            <th>Actual Pace</th>
+            <th>Nutrition & Crew Notes</th>
           </tr>
         </thead>
         <tbody id="aidTableBody">
@@ -148,6 +149,11 @@
   </div>
 
   <script>
+    // FIX #2: Register Service Worker for Offline PWA Support
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').then(() => console.log("Offline SW Registered"));
+    }
+
     mapboxgl.accessToken = 'pk.eyJ1IjoiZmluczEyOSIsImEiOiJjbWRkYTAxcXIwMmdvMnJwc2xodjF4b3M5In0.58QcMA8Zo_BPNLORLz5Sug';
     const GARMIN_FEED = "https://share.garmin.com/Feed/Share/DanFindley";
     const RACE_START_TIME = new Date('2026-08-08T05:00:00-06:00');
@@ -160,7 +166,6 @@
     });
     map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
-    // UI State Management
     let isNightMode = false;
     let isSatellite = false;
     let initialLoadComplete = false;
@@ -186,7 +191,6 @@
       return el;
     }
 
-    // Interactive Hover Marker for Elevation Chart Sync
     const hoverEl = document.createElement('div');
     hoverEl.style.width = '14px';
     hoverEl.style.height = '14px';
@@ -197,24 +201,23 @@
     hoverEl.style.pointerEvents = 'none'; 
     const hoverMarker = new mapboxgl.Marker({ element: hoverEl });
 
-    // Aid Station Data with Hardcoded GPS Coords for the Navigate Buttons
+    // FIX #1: UPDATED 32-HOUR DYNAMIC PACING DATA
     const aidStations = [
-      { name: "Start", targetMile: 0.0, legMi: 0, gain: "+0", loss: "-0", planEta: "Aug 8, 5:00 AM", coords: null, notes: "Start w/ Headlamp & Gloves" },
-      { name: "Upper Porcupine 1", targetMile: 6.5, legMi: 6.5, gain: "+516", loss: "-1094", planEta: "Aug 8, 6:16 AM", coords: [-109.358628, 38.578562], notes: "<span class='badge badge-crew'>Crew</span> Drop Headlamp & Gloves" },
-      { name: "Upper Porcupine 2", targetMile: 15.4, legMi: 8.9, gain: "+1500", loss: "-1556", planEta: "Aug 8, 8:10 AM", coords: [-109.358628, 38.578562], notes: "<span class='badge badge-crew'>Crew</span> Warming Up - Hydrate" },
-      { name: "Hazardous 1", targetMile: 23.2, legMi: 7.8, gain: "+2294", loss: "-241", planEta: "Aug 8, 10:44 AM", coords: [-109.2815, 38.5255], notes: "<span class='badge badge-drop'>Drop Bag</span> Peak Heat Climb" },
-      { name: "Geyser 1", targetMile: 32.0, legMi: 8.8, gain: "+3293", loss: "-2109", planEta: "Aug 8, 1:58 PM", coords: [-109.22586, 38.47884], notes: "<span class='badge badge-drop'>Drop Bag</span> Afternoon Push" },
-      { name: "Dark Canyon", targetMile: 42.2, legMi: 10.2, gain: "+506", loss: "-1824", planEta: "Aug 8, 4:01 PM", coords: [-109.17981, 38.41583], notes: "<span class='badge badge-crew'>Crew</span> Cruising Descent" },
-      { name: "Winter Creek", targetMile: 47.7, legMi: 5.5, gain: "+36", loss: "-1510", planEta: "Aug 8, 5:06 PM", coords: [-109.18627, 38.36465], notes: "<span class='badge badge-crew'>Crew</span> Grab Headlamp just in case" },
-      { name: "South Mountain 1", targetMile: 56.8, legMi: 9.1, gain: "+2515", loss: "-54", planEta: "Aug 8, 7:54 PM", coords: [-109.251646, 38.418903], notes: "<span class='badge badge-crew'>Crew</span> <span class='badge badge-drop'>Drop Bag</span> <span class='badge badge-gear'>Jacket/Gloves</span>" },
-      { name: "South Mountain 2", targetMile: 67.7, legMi: 10.9, gain: "+2787", loss: "-2980", planEta: "Aug 8, 11:48 PM", coords: [-109.251646, 38.418903], notes: "<span class='badge badge-crew'>Crew</span> <span class='badge badge-drop'>Drop Bag</span> Night Loop Complete" },
-      { name: "Squaw Springs", targetMile: 75.4, legMi: 7.7, gain: "+928", loss: "-1964", planEta: "Aug 9, 2:33 AM", coords: [-109.2898, 38.47916], notes: "<span class='badge badge-crew'>Crew</span> Pre-Dawn Cold" },
-      { name: "Geyser 2", targetMile: 81.0, legMi: 5.6, gain: "+1648", loss: "-179", planEta: "Aug 9, 4:42 AM", coords: [-109.22586, 38.47884], notes: "<span class='badge badge-drop'>Drop Bag</span> Sun Opening Up" },
-      { name: "Hazardous 2", targetMile: 88.0, legMi: 7.0, gain: "+848", loss: "-1966", planEta: "Aug 9, 7:00 AM", coords: [-109.2815, 38.5255], notes: "<span class='badge badge-drop'>Drop Bag</span> Drop Headlamp & Heavy Layers" },
-      { name: "Finish", targetMile: 99.2, legMi: 11.2, gain: "+2897", loss: "-4339", planEta: "Aug 9, 11:00 AM", coords: null, notes: "Final 11.2 Mi Push to Buckle!" }
+      { name: "Start", targetMile: 0.0, legMi: 0, planMins: 0, planEta: "Aug 8, 5:00 AM", coords: null, notes: "2 Gels | 2 Salt (Cool)" },
+      { name: "Upper Porcupine 1", targetMile: 6.5, legMi: 6.5, planMins: 81, planEta: "Aug 8, 6:21 AM", coords: [-109.358628, 38.578562], notes: "<span class='badge badge-crew'>Crew</span> 3 Gels | 3-4 Salt (Warming)" },
+      { name: "Upper Porcupine 2", targetMile: 15.4, legMi: 8.9, planMins: 121, planEta: "Aug 8, 8:22 AM", coords: [-109.358628, 38.578562], notes: "<span class='badge badge-crew'>Crew</span> 4 Gels | 6-8 Salt (Hot)" },
+      { name: "Hazardous 1", targetMile: 23.2, legMi: 7.8, planMins: 164, planEta: "Aug 8, 11:06 AM", coords: [-109.2815, 38.5255], notes: "<span class='badge badge-drop'>Drop Bag</span> 4 Gels | 8 Salt (Peak Heat)" },
+      { name: "Geyser 1", targetMile: 32.0, legMi: 8.8, planMins: 206, planEta: "Aug 8, 2:33 PM", coords: [-109.22586, 38.47884], notes: "<span class='badge badge-drop'>Drop Bag</span> 4 Gels | 8 Salt (Afternoon)" },
+      { name: "Dark Canyon", targetMile: 42.2, legMi: 10.2, planMins: 131, planEta: "Aug 8, 4:45 PM", coords: [-109.17981, 38.41583], notes: "<span class='badge badge-crew'>Crew</span> 2 Gels | 3-4 Salt (Late Aft)" },
+      { name: "Winter Creek", targetMile: 47.7, legMi: 5.5, planMins: 69, planEta: "Aug 8, 5:54 PM", coords: [-109.18627, 38.36465], notes: "<span class='badge badge-crew'>Crew</span> 4 Gels | 4 Salt (Dusk)" },
+      { name: "South Mountain 1", targetMile: 56.8, legMi: 9.1, planMins: 179, planEta: "Aug 8, 8:53 PM", coords: [-109.251646, 38.418903], notes: "<span class='badge badge-crew'>Crew</span> <span class='badge badge-drop'>Drop Bag</span> 6 Gels | 6 Salt (Night)" },
+      { name: "South Mountain 2", targetMile: 67.7, legMi: 10.9, planMins: 249, planEta: "Aug 9, 1:03 AM", coords: [-109.251646, 38.418903], notes: "<span class='badge badge-crew'>Crew</span> <span class='badge badge-drop'>Drop Bag</span> 4 Gels | 4 Salt (Night)" },
+      { name: "Squaw Springs", targetMile: 75.4, legMi: 7.7, planMins: 176, planEta: "Aug 9, 3:59 AM", coords: [-109.2898, 38.47916], notes: "<span class='badge badge-crew'>Crew</span> 3 Gels | 3 Salt (Pre-dawn)" },
+      { name: "Geyser 2", targetMile: 81.0, legMi: 5.6, planMins: 137, planEta: "Aug 9, 6:16 AM", coords: [-109.22586, 38.47884], notes: "<span class='badge badge-drop'>Drop Bag</span> 4 Gels | 4-6 Salt (Sun up)" },
+      { name: "Hazardous 2", targetMile: 88.0, legMi: 7.0, planMins: 147, planEta: "Aug 9, 8:44 AM", coords: [-109.2815, 38.5255], notes: "<span class='badge badge-drop'>Drop Bag</span> 5 Gels | 8-10 Salt (Daytime)" },
+      { name: "Finish", targetMile: 99.2, legMi: 11.2, planMins: 256, planEta: "Aug 9, 1:00 PM", coords: null, notes: "Final Push to Buckle!" }
     ];
 
-    // Grouped popups for map icons
     const groupedMarkers = [
       { name: "Upper Porcupine", miles: "Mi 6.5 & 15.4", coords: [-109.358628, 38.578562] },
       { name: "Hazardous", miles: "Mi 23.2 & 88.0", coords: [-109.2815, 38.5255] },
@@ -233,11 +236,12 @@
     let totalClimb = 0;
     const liveMarker = new mapboxgl.Marker({ element: createCustomMarker('🏃‍♂️', 'black', true, '24px', '38px') });
     let courseBounds;
-    let lastUpdateData = { mile: 0, time: null };
     let radarStrength = 10;
     const maxRadarLayers = 20;
 
-    // --- GPX ARTIFACT SMOOTHING ALGORITHMS ---
+    // Tracker History for Interpolation
+    let trackHistory = []; 
+
     function removeElevationSpikes(data, windowSize = 25) {
       let result = [];
       let half = Math.floor(windowSize / 2);
@@ -256,11 +260,9 @@
       let result = [];
       let half = Math.floor(windowSize / 2);
       for (let i = 0; i < data.length; i++) {
-        let sum = 0;
-        let count = 0;
+        let sum = 0; let count = 0;
         for (let j = Math.max(0, i - half); j <= Math.min(data.length - 1, i + half); j++) {
-          sum += data[j];
-          count++;
+          sum += data[j]; count++;
         }
         result.push(sum / count);
       }
@@ -274,6 +276,12 @@
       preloadRadarLayers(); 
       updateRadarVisibility(false);
       
+      // FIX #5: Auto-Night Mode Initialization
+      const currentHour = new Date().getHours();
+      if (currentHour >= 20 || currentHour < 6) {
+        document.getElementById('toggleNight').click(); // Auto-switch to dark
+      }
+
       fetchGarminLocation();
       setInterval(fetchGarminLocation, 120000); 
       initialLoadComplete = true; 
@@ -283,31 +291,8 @@
       if (!initialLoadComplete) return; 
       if (window.courseDataGeoJson && !map.getSource('course')) {
         map.addSource('course', { type: 'geojson', data: window.courseDataGeoJson });
-        
-        map.addLayer({
-          id: 'course-line',
-          type: 'line',
-          source: 'course',
-          paint: { 'line-color': '#FF4500', 'line-width': 4, 'line-blur': 1 }
-        });
-
-        map.addLayer({
-          id: 'course-arrows',
-          type: 'symbol',
-          source: 'course',
-          layout: {
-            'symbol-placement': 'line',
-            'symbol-spacing': 80,
-            'text-field': '▶',
-            'text-size': 16,
-            'text-keep-upright': false
-          },
-          paint: {
-            'text-color': '#ffffff',
-            'text-halo-color': '#FF4500',
-            'text-halo-width': 1.5
-          }
-        });
+        map.addLayer({ id: 'course-line', type: 'line', source: 'course', paint: { 'line-color': '#FF4500', 'line-width': 4, 'line-blur': 1 } });
+        map.addLayer({ id: 'course-arrows', type: 'symbol', source: 'course', layout: { 'symbol-placement': 'line', 'symbol-spacing': 80, 'text-field': '▶', 'text-size': 16, 'text-keep-upright': false }, paint: { 'text-color': '#ffffff', 'text-halo-color': '#FF4500', 'text-halo-width': 1.5 } });
       }
       preloadRadarLayers();
       const radarToggle = document.getElementById('toggleRadar');
@@ -322,25 +307,53 @@
         const kmlText = await response.text();
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(kmlText, "application/xml");
-        const coordElement = xmlDoc.querySelector("coordinates");
-        if (!coordElement) throw new Error("No coordinates found");
+        
+        // Parse ALL placemarks to build interpolation history
+        const placemarks = Array.from(xmlDoc.querySelectorAll("Placemark"));
+        trackHistory = [];
 
-        const [lng, lat] = coordElement.textContent.trim().split(",").map(Number);
-        liveMarker.setLngLat([lng, lat]).addTo(map);
-        updateElevationMarker(lng, lat, new Date());
+        placemarks.forEach(pm => {
+          const coordEl = pm.querySelector("coordinates");
+          const timeEl = pm.querySelector("when");
+          if (coordEl && timeEl) {
+            const [lng, lat] = coordEl.textContent.trim().split(",").map(Number);
+            const time = new Date(timeEl.textContent.trim());
+            const mile = calculateMileForCoord(lng, lat);
+            trackHistory.push({ time, mile, lng, lat });
+          }
+        });
+
+        trackHistory.sort((a, b) => a.time - b.time);
+
+        if (trackHistory.length > 0) {
+            const latest = trackHistory[trackHistory.length - 1];
+            liveMarker.setLngLat([latest.lng, latest.lat]).addTo(map);
+            updateElevationMarker(latest);
+        }
       } catch (error) {
         console.error("Garmin KML fetch error:", error);
       }
     }
 
+    function calculateMileForCoord(lng, lat) {
+        let minDist = Infinity;
+        let closestIndex = 0;
+        for (let i = 0; i < coursePoints.length; i++) {
+            const d = distance([lng, lat], coursePoints[i]);
+            if (d < minDist) { minDist = d; closestIndex = i; }
+        }
+        let traveledDist = 0;
+        for (let i = 1; i <= closestIndex; i++) {
+            traveledDist += distance(coursePoints[i - 1], coursePoints[i]);
+        }
+        return traveledDist / 1609.34;
+    }
+
     async function initCourse() {
       const data = await fetch('course.geojson').then(res => res.json());
       window.courseDataGeoJson = data; 
-
       const coords = data.features[0].geometry.coordinates;
-      let totalDist = 0;
-      let climb = 0;
-      let rawElevData = [];
+      let totalDist = 0; let climb = 0; let rawElevData = [];
       const bounds = new mapboxgl.LngLatBounds();
 
       for (let i = 0; i < coords.length; i++) {
@@ -350,10 +363,8 @@
           const elevGain = (coords[i][2] - coords[i - 1][2]) * 3.28084;
           if (elevGain > 0) climb += elevGain;
         }
-        
         const currentMile = totalDist / 1609.34;
         
-        // Auto-populate Start and Finish coordinates from GPX if missing
         aidStations.forEach(station => {
             if (!station.coords && currentMile >= station.targetMile) {
                 station.coords = [coords[i][0], coords[i][1]];
@@ -361,221 +372,249 @@
         });
 
         elevationLabels.push(Number(currentMile.toFixed(1)));
-        const elevFeet = coords[i][2] ? coords[i][2] * 3.28084 : 0;
-        rawElevData.push(elevFeet);
+        rawElevData.push(coords[i][2] ? coords[i][2] * 3.28084 : 0);
         coursePoints.push([coords[i][0], coords[i][1]]);
       }
 
       let cleanedElevData = removeElevationSpikes(rawElevData, 25);
       elevationData = smoothElevation(cleanedElevData, 9);
-
       totalClimb = Math.round(climb);
       totalMiles = (totalDist / 1609.34).toFixed(1);
       courseBounds = bounds;
 
       document.getElementById('remain').textContent = totalMiles;
       document.getElementById('climbInfo').textContent = `Climbed: 0 ft | To Go: ${totalClimb} ft`;
-      if (elevationData.length > 0) {
-          document.getElementById('elev').textContent = elevationData[0].toFixed(0);
-      }
+      if (elevationData.length > 0) document.getElementById('elev').textContent = elevationData[0].toFixed(0);
 
       if (!map.getSource('course')) {
         map.addSource('course', { type: 'geojson', data: window.courseDataGeoJson });
-        
-        map.addLayer({
-          id: 'course-line',
-          type: 'line',
-          source: 'course',
-          paint: { 'line-color': '#FF4500', 'line-width': 4, 'line-blur': 1 }
-        });
-
-        map.addLayer({
-          id: 'course-arrows',
-          type: 'symbol',
-          source: 'course',
-          layout: {
-            'symbol-placement': 'line',
-            'symbol-spacing': 80,
-            'text-field': '▶',
-            'text-size': 16,
-            'text-keep-upright': false
-          },
-          paint: {
-            'text-color': '#ffffff',
-            'text-halo-color': '#FF4500',
-            'text-halo-width': 1.5
-          }
-        });
+        map.addLayer({ id: 'course-line', type: 'line', source: 'course', paint: { 'line-color': '#FF4500', 'line-width': 4, 'line-blur': 1 } });
+        map.addLayer({ id: 'course-arrows', type: 'symbol', source: 'course', layout: { 'symbol-placement': 'line', 'symbol-spacing': 80, 'text-field': '▶', 'text-size': 16, 'text-keep-upright': false }, paint: { 'text-color': '#ffffff', 'text-halo-color': '#FF4500', 'text-halo-width': 1.5 } });
       }
 
-      // Add Standard Click-to-Open Popups for Aid Stations
       groupedMarkers.forEach(station => {
         const popupContent = `<div style="text-align:center; font-family:sans-serif;"><strong>${station.name}</strong><br><span style="font-size:11px; color:#666;">${station.miles}</span></div>`;
-        new mapboxgl.Marker({ element: createCustomMarker('✚', '#d32f2f', true, '18px', '30px') })
-          .setLngLat(station.coords)
-          .setPopup(new mapboxgl.Popup({ offset: 15, closeButton: false }).setHTML(popupContent))
-          .addTo(map);
+        new mapboxgl.Marker({ element: createCustomMarker('✚', '#d32f2f', true, '18px', '30px') }).setLngLat(station.coords).setPopup(new mapboxgl.Popup({ offset: 15, closeButton: false }).setHTML(popupContent)).addTo(map);
       });
 
-      new mapboxgl.Marker({ element: createCustomMarker('🏳️', 'green', true, '18px', '30px') })
-        .setLngLat(coursePoints[0])
-        .setPopup(new mapboxgl.Popup({ offset: 15, closeButton: false }).setHTML('<div style="text-align:center; font-family:sans-serif;"><strong>Start</strong><br><span style="font-size:11px; color:#666;">Mi 0.0</span></div>'))
-        .addTo(map);
-
-      new mapboxgl.Marker({ element: createCustomMarker('🏁', 'black', true, '18px', '30px') })
-        .setLngLat(coursePoints[coursePoints.length - 1])
-        .setPopup(new mapboxgl.Popup({ offset: 15, closeButton: false }).setHTML('<div style="text-align:center; font-family:sans-serif;"><strong>Finish</strong><br><span style="font-size:11px; color:#666;">Mi 99.2</span></div>'))
-        .addTo(map);
-
+      new mapboxgl.Marker({ element: createCustomMarker('🏳️', 'green', true, '18px', '30px') }).setLngLat(coursePoints[0]).setPopup(new mapboxgl.Popup({ offset: 15, closeButton: false }).setHTML('<div style="text-align:center; font-family:sans-serif;"><strong>Start</strong><br><span style="font-size:11px; color:#666;">Mi 0.0</span></div>')).addTo(map);
+      new mapboxgl.Marker({ element: createCustomMarker('🏁', 'black', true, '18px', '30px') }).setLngLat(coursePoints[coursePoints.length - 1]).setPopup(new mapboxgl.Popup({ offset: 15, closeButton: false }).setHTML('<div style="text-align:center; font-family:sans-serif;"><strong>Finish</strong><br><span style="font-size:11px; color:#666;">Mi 99.2</span></div>')).addTo(map);
       map.fitBounds(courseBounds, { padding: 40 });
-      buildPacingTable(0, 18.15, false);
+      buildPacingTable({ mile: 0, time: null });
 
       const ctx = document.getElementById('elevationChart').getContext('2d');
       elevationChart = new Chart(ctx, {
         type: 'line',
-        data: {
-          labels: elevationLabels,
-          datasets: [{
-            label: 'Elevation (ft)',
-            data: elevationData,
-            borderColor: '#1E3F66',
-            fill: false,
-            pointRadius: 0,
-            pointHoverRadius: 5
-          }]
-        },
+        data: { labels: elevationLabels, datasets: [{ label: 'Elevation (ft)', data: elevationData, borderColor: '#1E3F66', fill: false, pointRadius: 0, pointHoverRadius: 5 }] },
         options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          interaction: {
-            mode: 'index',
-            intersect: false,
-          },
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
           onHover: (event, elements) => {
             if (elements && elements.length > 0) {
-              const index = elements[0].index;
-              hoverMarker.setLngLat(coursePoints[index]).addTo(map);
-            } else {
-              hoverMarker.remove();
-            }
+              hoverMarker.setLngLat(coursePoints[elements[0].index]).addTo(map);
+            } else hoverMarker.remove();
           },
-          scales: {
-            x: { title: { display: true, text: 'Distance (mi)' }, ticks: { callback: function(val) { return this.getLabelForValue(val).toFixed(1); } } },
-            y: { title: { display: true, text: 'Elev (ft)' } }
-          },
+          scales: { x: { title: { display: true, text: 'Distance (mi)' }, ticks: { callback: function(val) { return this.getLabelForValue(val).toFixed(1); } } }, y: { title: { display: true, text: 'Elev (ft)' } } },
           plugins: { legend: { display: false } }
         }
       });
     }
 
-    function buildPacingTable(currentMile, avgPace, isRaceActive) {
+    function interpolateArrivalTime(targetMile) {
+      if (trackHistory.length === 0) return null;
+      let pingBefore = null;
+      let pingAfter = null;
+
+      for (let i = 0; i < trackHistory.length; i++) {
+        if (trackHistory[i].mile <= targetMile) pingBefore = trackHistory[i];
+        if (trackHistory[i].mile >= targetMile && !pingAfter) pingAfter = trackHistory[i];
+      }
+
+      if (pingBefore && !pingAfter) return pingBefore.time; // Hasn't arrived yet, returning last ping as fallback if forced
+      if (!pingBefore && pingAfter) return RACE_START_TIME; 
+      
+      if (pingBefore && pingAfter) {
+          if (pingBefore.mile === pingAfter.mile) return pingBefore.time;
+          // Linear Interpolation
+          const ratio = (targetMile - pingBefore.mile) / (pingAfter.mile - pingBefore.mile);
+          const timeDiffMs = pingAfter.time.getTime() - pingBefore.time.getTime();
+          return new Date(pingBefore.time.getTime() + (timeDiffMs * ratio));
+      }
+      return null;
+    }
+
+    function formatPace(minsPerMile) {
+        if (!minsPerMile || minsPerMile < 0 || minsPerMile > 100) return "--";
+        const m = Math.floor(minsPerMile);
+        const s = Math.floor((minsPerMile - m) * 60);
+        return `${m}:${s.toString().padStart(2, '0')}/mi`;
+    }
+
+    function formatTime(dateObj) {
+        if (!dateObj) return "--";
+        let ampm = dateObj.getHours() >= 12 ? 'PM' : 'AM';
+        let hrs = dateObj.getHours() % 12 || 12;
+        let mins = dateObj.getMinutes().toString().padStart(2, '0');
+        return `${hrs}:${mins} ${ampm}`;
+    }
+
+    function buildPacingTable(latestUpdate) {
       const tbody = document.getElementById('aidTableBody');
       tbody.innerHTML = '';
+      const currentMile = latestUpdate.mile;
+
+      let previousActualTime = RACE_START_TIME;
 
       aidStations.forEach((st, idx) => {
         const row = document.createElement('tr');
         
         let statusClass = '';
-        if (currentMile >= st.targetMile && st.targetMile > 0) {
-          statusClass = 'status-passed';
-        } else if (currentMile < st.targetMile && (idx === 0 || currentMile >= aidStations[idx-1].targetMile)) {
-          statusClass = 'status-next';
-        }
+        let hasPassed = currentMile >= st.targetMile && st.targetMile > 0;
+        let isNext = currentMile < st.targetMile && (idx === 0 || currentMile >= aidStations[idx-1].targetMile);
 
-        let liveEtaStr = "--";
+        if (hasPassed) statusClass = 'status-passed';
+        else if (isNext) statusClass = 'status-next';
+
+        // Plan Pace Calc
+        const planPaceStr = st.legMi > 0 ? formatPace(st.planMins / st.legMi) : "--";
+
+        // Actual Calc via Interpolation
+        let actualTime = null;
+        let actualPaceStr = "--";
+        let displayEta = "--";
+
         if (st.targetMile === 0) {
-          liveEtaStr = st.planEta;
-        } else if (currentMile >= st.targetMile && st.targetMile > 0) {
-          liveEtaStr = "Passed"; 
-        } else if (isRaceActive) {
-          const totalLegMins = st.targetMile * avgPace;
-          const projDate = new Date(RACE_START_TIME.getTime() + totalLegMins * 60000);
-          
-          let ampm = projDate.getHours() >= 12 ? 'PM' : 'AM';
-          let hrs = projDate.getHours() % 12 || 12;
-          let mins = projDate.getMinutes().toString().padStart(2, '0');
-          let day = projDate.getDate();
-          
-          liveEtaStr = `Aug ${day}, ${hrs}:${mins} ${ampm}`;
+            actualTime = RACE_START_TIME;
+            displayEta = formatTime(actualTime);
+        } else if (hasPassed) {
+            actualTime = interpolateArrivalTime(st.targetMile);
+            displayEta = `Actual: ${formatTime(actualTime)}`;
+            if (actualTime && previousActualTime && st.legMi > 0) {
+                const legMins = (actualTime - previousActualTime) / 60000;
+                actualPaceStr = formatPace(legMins / st.legMi);
+            }
+        } else if (latestUpdate.time) {
+            // Dynamic ETA: Current Time + (Remaining Leg Dist * Plan Pace) + Future Legs
+            let futureMins = 0;
+            if (isNext) {
+                const remainingLegMi = st.targetMile - currentMile;
+                const pace = st.planMins / st.legMi; // plan pace for this leg
+                futureMins += (remainingLegMi * pace);
+            } else {
+                // It's a future leg. We need to add the full planMins of this leg, 
+                // PLUS the projected arrival time of the previous leg.
+                // Simpler: Find total minutes from *current location* to this aid station based on plan.
+                
+                let distToCover = st.targetMile - currentMile;
+                // Start with the current leg's remainder
+                let currentLegIdx = aidStations.findIndex(a => a.targetMile > currentMile);
+                let currentLeg = aidStations[currentLegIdx];
+                let currentLegRem = currentLeg.targetMile - currentMile;
+                futureMins += (currentLegRem * (currentLeg.planMins / currentLeg.legMi));
+
+                // Add full plan times for intermediate legs
+                for (let j = currentLegIdx + 1; j <= idx; j++) {
+                    futureMins += aidStations[j].planMins;
+                }
+            }
+            
+            const projDate = new Date(latestUpdate.time.getTime() + futureMins * 60000);
+            let day = projDate.getDate();
+            displayEta = `Proj: Aug ${day}, ${formatTime(projDate)}`;
         } else {
-          liveEtaStr = st.planEta; 
+            displayEta = "Waiting...";
         }
 
-        // Setup the Google Maps Navigation URL
+        if (actualTime) previousActualTime = actualTime;
+
         const navLink = st.coords ? `<br><a href="https://www.google.com/maps/dir/?api=1&destination=${st.coords[1]},${st.coords[0]}" target="_blank" class="nav-link-btn">🧭 Navigate</a>` : '';
 
         row.className = statusClass;
         row.innerHTML = `
           <td><strong>${st.name}</strong>${navLink}</td>
           <td>${st.targetMile}</td>
-          <td>${st.planEta}</td>
-          <td><strong>${liveEtaStr}</strong></td>
           <td>${st.legMi} mi</td>
-          <td>${st.gain} / ${st.loss}</td>
+          <td>${st.planEta}</td>
+          <td><strong>${displayEta}</strong></td>
+          <td>${planPaceStr}</td>
+          <td><strong>${actualPaceStr}</strong></td>
           <td>${st.notes}</td>
         `;
         tbody.appendChild(row);
       });
     }
 
-    function updateElevationMarker(lng, lat, timestamp) {
+    function updateElevationMarker(latest) {
       let closestIndex = 0;
       let minDist = Infinity;
       for (let i = 0; i < coursePoints.length; i++) {
-        const d = distance([lng, lat], coursePoints[i]);
+        const d = distance([latest.lng, latest.lat], coursePoints[i]);
         if (d < minDist) { minDist = d; closestIndex = i; }
       }
 
-      let traveledDist = 0;
       let climbed = 0;
       for (let i = 1; i <= closestIndex; i++) {
-        traveledDist += distance(coursePoints[i - 1], coursePoints[i]);
         const gain = elevationData[i] - elevationData[i - 1];
         if (gain > 0) climbed += gain;
       }
 
-      const currentMile = (traveledDist / 1609.34);
-      const remainMiles = Math.max(0, (totalMiles - currentMile)).toFixed(1);
+      const remainMiles = Math.max(0, (totalMiles - latest.mile)).toFixed(1);
       const currentElev = elevationData[closestIndex].toFixed(0);
       const climbedFt = Math.round(climbed);
       const climbRemaining = Math.max(0, totalClimb - climbedFt);
 
-      document.getElementById('mile').textContent = currentMile.toFixed(1);
+      document.getElementById('mile').textContent = latest.mile.toFixed(1);
       document.getElementById('elev').textContent = currentElev;
       document.getElementById('remain').textContent = remainMiles;
       document.getElementById('climbInfo').textContent = `Climbed: ${climbedFt} ft | To Go: ${climbRemaining} ft`;
 
-      const elapsedMinutes = (timestamp - RACE_START_TIME) / 60000;
-      let avgPace = 18.15; 
-
-      if (elapsedMinutes > 0 && currentMile > 0.1) {
-        avgPace = elapsedMinutes / currentMile;
-        const avgMin = Math.floor(avgPace);
-        const avgSec = Math.floor((avgPace - avgMin) * 60);
-        document.getElementById('averagePace').textContent = `Overall Pace: ${avgMin}:${avgSec.toString().padStart(2, '0')} min/mi`;
-
-        const estFinishMinutes = avgPace * totalMiles;
-        const finishTime = new Date(RACE_START_TIME.getTime() + estFinishMinutes * 60000);
-        
-        let ampm = finishTime.getHours() >= 12 ? 'PM' : 'AM';
-        let hrs = finishTime.getHours() % 12 || 12;
-        let mins = finishTime.getMinutes().toString().padStart(2, '0');
-        document.getElementById('estFinish').textContent = `Est Finish: ${hrs}:${mins} ${ampm}`;
-        
-        const targetMinsAtDist = currentMile * 18.15;
-        const deltaMins = Math.round(elapsedMinutes - targetMinsAtDist);
-        const deltaStr = deltaMins <= 0 ? `${Math.abs(deltaMins)} mins AHEAD` : `${deltaMins} mins BEHIND`;
-        document.getElementById('deltaTarget').textContent = `Vs 30-Hr Plan: ${deltaStr}`;
-      } else {
-        document.getElementById('averagePace').textContent = `Overall Pace: Pre-Race`;
-        document.getElementById('estFinish').textContent = `Est Finish: --`;
-        document.getElementById('deltaTarget').textContent = `Vs 30-Hr Plan: --`;
+      // Stale Ping Logic (Fix #3)
+      const now = new Date();
+      const ageMins = (now - latest.time) / 60000;
+      const lastUpdateEl = document.getElementById('lastUpdate');
+      lastUpdateEl.textContent = `Location: ${latest.time.toLocaleTimeString()} (${Math.round(ageMins)}m ago)`;
+      
+      lastUpdateEl.classList.remove('stale-warning', 'stale-danger');
+      if (ageMins > 45) {
+          lastUpdateEl.classList.add('stale-danger');
+          lastUpdateEl.textContent += " - SIGNAL DELAYED";
+      } else if (ageMins > 20) {
+          lastUpdateEl.classList.add('stale-warning');
       }
 
-      buildPacingTable(currentMile, avgPace, elapsedMinutes > 0);
+      // Dynamic Overall Status
+      const elapsedMinutes = (latest.time - RACE_START_TIME) / 60000;
+      if (elapsedMinutes > 0 && latest.mile > 0.1) {
+        // Calculate pace for JUST the current leg
+        let currentLegIdx = aidStations.findIndex(a => a.targetMile > latest.mile);
+        if (currentLegIdx > 0) {
+            let prevStation = aidStations[currentLegIdx - 1];
+            let actualArrival = interpolateArrivalTime(prevStation.targetMile);
+            if (actualArrival) {
+                let legElapsedMins = (latest.time - actualArrival) / 60000;
+                let legDistCovered = latest.mile - prevStation.targetMile;
+                document.getElementById('averagePace').textContent = `Current Leg Pace: ${formatPace(legElapsedMins/legDistCovered)}`;
+            }
+        }
 
-      lastUpdateData = { mile: currentMile, time: timestamp };
-      document.getElementById('lastUpdate').textContent = "Location: " + timestamp.toLocaleTimeString();
+        // Target Mins calc
+        let targetMinsAtDist = 0;
+        for(let i=1; i<=currentLegIdx; i++) {
+            if (i === currentLegIdx) {
+                // Partial leg
+                let distIntoLeg = latest.mile - aidStations[i-1].targetMile;
+                targetMinsAtDist += distIntoLeg * (aidStations[i].planMins / aidStations[i].legMi);
+            } else {
+                targetMinsAtDist += aidStations[i].planMins;
+            }
+        }
+        
+        const deltaMins = Math.round(elapsedMinutes - targetMinsAtDist);
+        const deltaStr = deltaMins <= 0 ? `${Math.abs(deltaMins)} mins AHEAD` : `${deltaMins} mins BEHIND`;
+        document.getElementById('deltaTarget').textContent = `Vs 32-Hr Plan: ${deltaStr}`;
+      }
+
+      buildPacingTable(latest);
 
       elevationChart.data.datasets[1] = {
         label: 'Current Position',
@@ -588,56 +627,10 @@
       elevationChart.update();
     }
 
-    function distance(a, b) {
-      const R = 6371000;
-      const toRad = x => x * Math.PI / 180;
-      const dLat = toRad(b[1] - a[1]);
-      const dLon = toRad(b[0] - a[0]);
-      const lat1 = toRad(a[1]);
-      const lat2 = toRad(b[1]);
-      const x = dLon * Math.cos((lat1 + lat2) / 2);
-      const y = dLat;
-      return Math.sqrt(x * x + y * y) * R;
-    }
-
-    function preloadRadarLayers() {
-      if (!map.isStyleLoaded()) return;
-      for (let i = 0; i < maxRadarLayers; i++) {
-        const layerId = `radar-layer-${i}`;
-        if (!map.getSource(layerId)) {
-          map.addSource(layerId, {
-            type: 'raster',
-            tiles: [`https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${OWM_API_KEY}`],
-            tileSize: 256
-          });
-          map.addLayer({
-            id: layerId,
-            type: 'raster',
-            source: layerId,
-            paint: { 'raster-opacity': 1.0 },
-            layout: { visibility: i < radarStrength && document.getElementById('toggleRadar').checked ? 'visible' : 'none' }
-          });
-        }
-      }
-    }
-
-    function updateRadarVisibility(isVisible = true) {
-      for (let i = 0; i < maxRadarLayers; i++) {
-        const visibility = (isVisible && i < radarStrength) ? 'visible' : 'none';
-        if (map.getLayer(`radar-layer-${i}`)) {
-          map.setLayoutProperty(`radar-layer-${i}`, 'visibility', visibility);
-        }
-      }
-    }
-
     function applyMapStyle() {
-      if (isSatellite) {
-        map.setStyle('mapbox://styles/mapbox/satellite-streets-v12');
-      } else if (isNightMode) {
-        map.setStyle('mapbox://styles/mapbox/dark-v11');
-      } else {
-        map.setStyle('mapbox://styles/mapbox/outdoors-v12');
-      }
+      if (isSatellite) map.setStyle('mapbox://styles/mapbox/satellite-streets-v12');
+      else if (isNightMode) map.setStyle('mapbox://styles/mapbox/dark-v11');
+      else map.setStyle('mapbox://styles/mapbox/outdoors-v12');
     }
 
     function updatePanels() {
@@ -646,95 +639,61 @@
       const tableEl = document.getElementById('tableContainer');
       const btnElev = document.getElementById('btnElevation');
       const btnTable = document.getElementById('btnPacing');
-
-      btnElev.classList.remove('active');
-      btnTable.classList.remove('active');
+      btnElev.classList.remove('active'); btnTable.classList.remove('active');
 
       if (activePanel === 'elevation') {
-        mapEl.style.height = '65%';
-        elevEl.style.height = '35%';
-        tableEl.style.height = '0%';
-        btnElev.classList.add('active');
+        mapEl.style.height = '65%'; elevEl.style.height = '35%'; tableEl.style.height = '0%'; btnElev.classList.add('active');
       } else if (activePanel === 'table') {
-        mapEl.style.height = '50%';
-        tableEl.style.height = '50%';
-        elevEl.style.height = '0%';
-        btnTable.classList.add('active');
+        mapEl.style.height = '50%'; tableEl.style.height = '50%'; elevEl.style.height = '0%'; btnTable.classList.add('active');
       } else {
-        mapEl.style.height = '100%';
-        elevEl.style.height = '0%';
-        tableEl.style.height = '0%';
+        mapEl.style.height = '100%'; elevEl.style.height = '0%'; tableEl.style.height = '0%';
       }
       setTimeout(() => map.resize(), 300);
     }
 
     function setupUIControls() {
-      document.getElementById('btnElevation').addEventListener('click', () => {
-        activePanel = activePanel === 'elevation' ? 'none' : 'elevation';
-        updatePanels();
-      });
-
-      document.getElementById('btnPacing').addEventListener('click', () => {
-        activePanel = activePanel === 'table' ? 'none' : 'table';
-        updatePanels();
-      });
-
-      document.getElementById('btnSettings').addEventListener('click', () => {
-        document.getElementById('settingsMenu').style.display = 'flex';
-      });
-      document.getElementById('closeSettings').addEventListener('click', () => {
-        document.getElementById('settingsMenu').style.display = 'none';
-      });
-
+      document.getElementById('btnElevation').addEventListener('click', () => { activePanel = activePanel === 'elevation' ? 'none' : 'elevation'; updatePanels(); });
+      document.getElementById('btnPacing').addEventListener('click', () => { activePanel = activePanel === 'table' ? 'none' : 'table'; updatePanels(); });
+      document.getElementById('btnSettings').addEventListener('click', () => { document.getElementById('settingsMenu').style.display = 'flex'; });
+      document.getElementById('closeSettings').addEventListener('click', () => { document.getElementById('settingsMenu').style.display = 'none'; });
       document.getElementById('toggleRadar').checked = false; 
       document.getElementById('toggleRadar').addEventListener('change', e => updateRadarVisibility(e.target.checked));
-
-      document.getElementById('refreshRadar').addEventListener('click', () => {
-        for (let i = 0; i < maxRadarLayers; i++) {
-          if (map.getLayer(`radar-layer-${i}`)) {
-            map.removeLayer(`radar-layer-${i}`);
-            map.removeSource(`radar-layer-${i}`);
-          }
-        }
-        preloadRadarLayers();
-        if (!document.getElementById('toggleRadar').checked) updateRadarVisibility(false);
-      });
-
-      document.getElementById('radarStrength').addEventListener('input', e => {
-        radarStrength = parseInt(e.target.value, 10);
-        updateRadarVisibility(document.getElementById('toggleRadar').checked);
-      });
-
+      document.getElementById('refreshRadar').addEventListener('click', () => { for (let i=0; i<maxRadarLayers; i++) { if (map.getLayer(`radar-layer-${i}`)) { map.removeLayer(`radar-layer-${i}`); map.removeSource(`radar-layer-${i}`); } } preloadRadarLayers(); if (!document.getElementById('toggleRadar').checked) updateRadarVisibility(false); });
+      document.getElementById('radarStrength').addEventListener('input', e => { radarStrength = parseInt(e.target.value, 10); updateRadarVisibility(document.getElementById('toggleRadar').checked); });
+      
       document.getElementById('toggleNight').addEventListener('click', () => {
-        isNightMode = !isNightMode;
-        document.body.classList.toggle('dark-mode', isNightMode);
+        isNightMode = !isNightMode; document.body.classList.toggle('dark-mode', isNightMode);
         document.getElementById('toggleNight').innerHTML = isNightMode ? '☀️ Day Mode' : '🌙 Night Mode';
         applyMapStyle();
-        
-        if (elevationChart) {
-          elevationChart.options.scales.x.ticks.color = isNightMode ? '#ccc' : '#666';
-          elevationChart.options.scales.y.ticks.color = isNightMode ? '#ccc' : '#666';
-          elevationChart.update();
-        }
+        if (elevationChart) { elevationChart.options.scales.x.ticks.color = isNightMode ? '#ccc' : '#666'; elevationChart.options.scales.y.ticks.color = isNightMode ? '#ccc' : '#666'; elevationChart.update(); }
       });
-
-      document.getElementById('toggleSat').addEventListener('click', () => {
-        isSatellite = !isSatellite;
-        document.getElementById('toggleSat').innerHTML = isSatellite ? '🗺️ Map View' : '🛰️ Satellite View';
-        applyMapStyle();
-      });
+      document.getElementById('toggleSat').addEventListener('click', () => { isSatellite = !isSatellite; document.getElementById('toggleSat').innerHTML = isSatellite ? '🗺️ Map View' : '🛰️ Satellite View'; applyMapStyle(); });
+      document.getElementById('zoomRunner').addEventListener('click', () => { const runnerPos = liveMarker.getLngLat(); map.flyTo({ center: runnerPos, zoom: 14 }); document.getElementById('settingsMenu').style.display = 'none'; });
+      document.getElementById('zoomCourse').addEventListener('click', () => { if (courseBounds) map.fitBounds(courseBounds, { padding: 40 }); document.getElementById('settingsMenu').style.display = 'none'; });
     }
 
-    function setupZoomControls() {
-      document.getElementById('zoomRunner').addEventListener('click', () => {
-        const runnerPos = liveMarker.getLngLat();
-        map.flyTo({ center: runnerPos, zoom: 14 });
-        document.getElementById('settingsMenu').style.display = 'none';
-      });
-      document.getElementById('zoomCourse').addEventListener('click', () => {
-        if (courseBounds) map.fitBounds(courseBounds, { padding: 40 });
-        document.getElementById('settingsMenu').style.display = 'none';
-      });
+    function distance(a, b) {
+      const R = 6371000; const toRad = x => x * Math.PI / 180;
+      const dLat = toRad(b[1] - a[1]); const dLon = toRad(b[0] - a[0]);
+      const x = dLon * Math.cos((toRad(a[1]) + toRad(b[1])) / 2);
+      return Math.sqrt(x * x + dLat * dLat) * R;
+    }
+
+    function preloadRadarLayers() {
+      if (!map.isStyleLoaded()) return;
+      for (let i = 0; i < maxRadarLayers; i++) {
+        const layerId = `radar-layer-${i}`;
+        if (!map.getSource(layerId)) {
+          map.addSource(layerId, { type: 'raster', tiles: [`https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${OWM_API_KEY}`], tileSize: 256 });
+          map.addLayer({ id: layerId, type: 'raster', source: layerId, paint: { 'raster-opacity': 1.0 }, layout: { visibility: i < radarStrength && document.getElementById('toggleRadar').checked ? 'visible' : 'none' } });
+        }
+      }
+    }
+
+    function updateRadarVisibility(isVisible = true) {
+      for (let i = 0; i < maxRadarLayers; i++) {
+        if (map.getLayer(`radar-layer-${i}`)) map.setLayoutProperty(`radar-layer-${i}`, 'visibility', (isVisible && i < radarStrength) ? 'visible' : 'none');
+      }
     }
   </script>
 </body>
