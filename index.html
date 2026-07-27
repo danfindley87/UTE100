@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ute 100 Live Tracker</title>
+
+  <!-- Mapbox -->
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.js"></script>
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.css" rel="stylesheet" />
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="config.js"></script> <!-- API key -->
+
+  <style>
+    body, html { margin: 0; padding: 0; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+    #map { width: 100%; height: 70%; position: relative; transition: height 0.3s ease; }
+    #elevationContainer { width: 100%; height: 30%; transition: height 0.3s ease, opacity 0.3s ease; opacity: 1; background: white; overflow: hidden; }
+    #elevationChart { width: 100%; height: 100%; max-height: 300px; }
+    #toggleChart { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 1000; background: rgba(255,255,255,0.9); border: 1px solid #ccc; border-radius: 4px; cursor: pointer; padding: 6px 12px; font-size: 14px; font-weight: bold; box-shadow: 0 0 4px rgba(0,0,0,0.3); }
+    #infoPanel { position: absolute; top: 10px; left: 10px; background: rgba(255, 255, 255, 0.9); padding: 8px 12px; border-radius: 8px; font-family: Arial, sans-serif; font-size: 14px; box-shadow: 0 0 5px rgba(0,0,0,0.3); z-index: 999; }
+    #lastUpdate, #currentPace, #averagePace, #estFinish, #climbInfo { font-size: 12px; margin-top: 4px; color: #333; }
+    #radarControls { position: absolute; bottom: 10px; right: 10px; background: rgba(255, 255, 255, 0.9); padding: 8px 12px; border-radius: 8px; font-size: 14px; font-family: Arial, sans-serif; z-index: 999; width: 200px; }
+    #radarControls button { margin-top: 4px; display: block; width: 100%; }
+    #radarStrength { width: 100%; }
+    #radarStrengthLabel { font-size: 12px; display: block; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div id="map">
+    <div id="infoPanel">
+      Mile: <span id="mile">0</span> | 
+      Elev: <span id="elev">0</span> ft | 
+      Remain: <span id="remain">0</span> mi
+      <div id="climbInfo">Climbed: 0 ft | To Go: 0 ft</div>
+      <div id="lastUpdate">Location last updated: waiting...</div>
+      <div id="currentPace">Current Pace: --</div>
+      <div id="averagePace">Avg Pace: --</div>
+      <div id="estFinish">Est Finish: --</div>
+    </div>
+    <div id="radarControls">
+      <input type="checkbox" id="toggleRadar" checked> Weather Radar 🌧 <br>
+      <label id="radarStrengthLabel" for="radarStrength">
+        Radar Strength: <span id="radarStrengthValue">10x</span>
+      </label>
+      <input type="range" id="radarStrength" min="1" max="20" value="10">
+      <button id="refreshRadar">🔄 Refresh Radar</button>
+      <button id="zoomRunner">🔍 Zoom to Runner</button>
+      <button id="zoomCourse">🗺️ Zoom to Course</button>
+    </div>
+    <button id="toggleChart">Elevation ▼</button>
+  </div>
+  <div id="elevationContainer">
+    <canvas id="elevationChart"></canvas>
+  </div>
+
+  <script>
+    mapboxgl.accessToken = 'pk.eyJ1IjoiZmluczEyOSIsImEiOiJjbWRkYTAxcXIwMmdvMnJwc2xodjF4b3M5In0.58QcMA8Zo_BPNLORLz5Sug';
+    const GARMIN_FEED = "https://share.garmin.com/Feed/Share/DanFindley";
+
+    const map = new mapboxgl.Map({
+      container: 'map',
+      style: 'mapbox://styles/mapbox/outdoors-v12',
+      center: [-109.25, 38.50], // Fallback center for La Sal Mountains
+      zoom: 10
+    });
+    map.addControl(new mapboxgl.NavigationControl());
+
+    function createCustomMarker(emoji, color = 'black', withBg = false) {
+      const el = document.createElement('div');
+      el.style.fontSize = '22px';
+      el.style.color = color;
+      el.style.textAlign = 'center';
+      el.textContent = emoji;
+      if (withBg) {
+        el.style.background = 'white';
+        el.style.borderRadius = '50%';
+        el.style.width = '30px';
+        el.style.height = '30px';
+        el.style.display = 'flex';
+        el.style.justifyContent = 'center';
+        el.style.alignItems = 'center';
+        el.style.boxShadow = '0 0 4px rgba(0,0,0,0.4)';
+      }
+      return el;
+    }
+
+    // Dynamic Aid Stations mapped to the Ute 100 pacing spreadsheet
+    const aidStations = [
+      { name: "Upper Porcupine (Mile 6.5)", targetMile: 6.5, coords: null },
+      { name: "Upper Porcupine 2 (Mile 15.4)", targetMile: 15.4, coords: null },
+      { name: "Hazardous (Mile 23.2)", targetMile: 23.2, coords: null },
+      { name: "Geyser (Mile 32.0)", targetMile: 32.0, coords: null },
+      { name: "Dark Canyon (Mile 42.2)", targetMile: 42.2, coords: null },
+      { name: "Winter Creek (Mile 47.7)", targetMile: 47.7, coords: null },
+      { name: "South Mountain (Mile 56.8)", targetMile: 56.8, coords: null },
+      { name: "South Mountain 2 (Mile 67.7)", targetMile: 67.7, coords: null },
+      { name: "Squaw Springs (Mile 75.4)", targetMile: 75.4, coords: null },
+      { name: "Geyser 2 (Mile 81.0)", targetMile: 81.0, coords: null },
+      { name: "Hazardous 2 (Mile 88.0)", targetMile: 88.0, coords: null }
+    ];
+
+    let elevationChart;
+    let elevationData = [];
+    let elevationLabels = [];
+    let coursePoints = [];
+    let totalMiles = 0;
+    let totalClimb = 0;
+    const liveMarker = new mapboxgl.Marker({ element: createCustomMarker('🏃‍♂️', 'black', true) });
+    let courseBounds;
+    let startTime = null;
+    let lastUpdateData = { mile: 0, time: null };
+    let radarStrength = 10;
+    const maxRadarLayers = 20;
+
+    map.on('load', () => {
+      initCourse();
+      preloadRadarLayers();
+      setupRadarControls();
+      setupZoomControls();
+      fetchGarminLocation();
+      setInterval(fetchGarminLocation, 120000); // every 2 mins
+    });
+
+    async function fetchGarminLocation() {
+      const CORS_PROXY = "https://corsproxy.io/?";
+      try {
+        const response = await fetch(`${CORS_PROXY}${GARMIN_FEED}`);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const kmlText = await response.text();
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(kmlText, "application/xml");
+        const coordElement = xmlDoc.querySelector("coordinates");
+        if (!coordElement) throw new Error("No coordinates found in KML");
+
+        const [lng, lat] = coordElement.textContent.trim().split(",").map(Number);
+        liveMarker.setLngLat([lng, lat]).addTo(map);
+        updateElevationMarker(lng, lat, new Date());
+      } catch (error) {
+        console.error("Garmin KML fetch error:", error);
+      }
+    }
+
+    async function initCourse() {
+      const data = await fetch('course.geojson').then(res => res.json());
+      const coords = data.features[0].geometry.coordinates;
+      let totalDist = 0;
+      let climb = 0;
+      const bounds = new mapboxgl.LngLatBounds();
+
+      for (let i = 0; i < coords.length; i++) {
+        bounds.extend(coords[i]);
+        if (i > 0) {
+          totalDist += distance(coords[i - 1], coords[i]);
+          const elevGain = (coords[i][2] - coords[i - 1][2]) * 3.28084;
+          if (elevGain > 0) climb += elevGain;
+        }
+        
+        const currentMile = totalDist / 1609.34;
+        
+        // Dynamically find aid station coordinates based on cumulative distance
+        aidStations.forEach(station => {
+            if (!station.coords && currentMile >= station.targetMile) {
+                station.coords = [coords[i][0], coords[i][1]];
+            }
+        });
+
+        elevationLabels.push(Number(currentMile.toFixed(1)));
+        const elevFeet = coords[i][2] ? coords[i][2] * 3.28084 : 0;
+        elevationData.push(elevFeet);
+        coursePoints.push([coords[i][0], coords[i][1]]);
+      }
+
+      totalClimb = Math.round(climb);
+      totalMiles = (totalDist / 1609.34).toFixed(1);
+      courseBounds = bounds;
+
+      map.addSource('course', { type: 'geojson', data: data });
+      map.addLayer({
+        id: 'course-line',
+        type: 'line',
+        source: 'course',
+        paint: { 'line-color': '#FF4500', 'line-width': 4, 'line-blur': 1 }
+      });
+
+      // Plot dynamic aid stations
+      aidStations.forEach(station => {
+        if(station.coords) {
+            new mapboxgl.Marker({ element: createCustomMarker('✚', 'red') })
+            .setLngLat(station.coords)
+            .setPopup(new mapboxgl.Popup().setText(station.name))
+            .addTo(map);
+        }
+      });
+
+      new mapboxgl.Marker({ element: createCustomMarker('🏳️', 'green') })
+        .setLngLat(coursePoints[0])
+        .setPopup(new mapboxgl.Popup().setText("Start"))
+        .addTo(map);
+
+      new mapboxgl.Marker({ element: createCustomMarker('🏁', 'black') })
+        .setLngLat(coursePoints[coursePoints.length - 1])
+        .setPopup(new mapboxgl.Popup().setText("Finish"))
+        .addTo(map);
+
+      // Auto-zoom to fit the Ute 100 course perfectly
+      map.fitBounds(courseBounds, { padding: 40 });
+
+      const ctx = document.getElementById('elevationChart').getContext('2d');
+      elevationChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: elevationLabels,
+          datasets: [{
+            label: 'Elevation (ft)',
+            data: elevationData,
+            borderColor: 'blue',
+            fill: false,
+            pointRadius: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              title: { display: true, text: 'Distance (mi)' },
+              ticks: { callback: function(value) { return this.getLabelForValue(value).toFixed(1); } }
+            },
+            y: { title: { display: true, text: 'Elevation (ft)' } }
+          },
+          plugins: { legend: { display: false } }
+        }
+      });
+    }
+
+    function updateElevationMarker(lng, lat, timestamp) {
+      if (!startTime) startTime = timestamp;
+      let closestIndex = 0;
+      let minDist = Infinity;
+      for (let i = 0; i < coursePoints.length; i++) {
+        const d = distance([lng, lat], coursePoints[i]);
+        if (d < minDist) {
+          minDist = d;
+          closestIndex = i;
+        }
+      }
+
+      let traveledDist = 0;
+      let climbed = 0;
+      for (let i = 1; i <= closestIndex; i++) {
+        traveledDist += distance(coursePoints[i - 1], coursePoints[i]);
+        const gain = elevationData[i] - elevationData[i - 1];
+        if (gain > 0) climbed += gain;
+      }
+
+      const currentMile = (traveledDist / 1609.34);
+      const remainMiles = (totalMiles - currentMile).toFixed(1);
+      const currentElev = elevationData[closestIndex].toFixed(0);
+      const climbedFt = Math.round(climbed);
+      const climbRemaining = Math.max(0, totalClimb - climbedFt);
+
+      document.getElementById('mile').textContent = currentMile.toFixed(1);
+      document.getElementById('elev').textContent = currentElev;
+      document.getElementById('remain').textContent = remainMiles;
+      document.getElementById('climbInfo').textContent = `Climbed: ${climbedFt} ft | To Go: ${climbRemaining} ft`;
+
+      if (lastUpdateData.time && timestamp) {
+        const timeDiff = (timestamp - lastUpdateData.time) / 60000;
+        const distDiff = currentMile - lastUpdateData.mile;
+        if (distDiff > 0.01) {
+          const pace = timeDiff / distDiff;
+          const paceMin = Math.floor(pace);
+          const paceSec = Math.floor((pace - paceMin) * 60);
+          document.getElementById('currentPace').textContent = 
+            `Current Pace: ${paceMin}:${paceSec.toString().padStart(2, '0')} min/mi`;
+        }
+      }
+
+      const elapsedMinutes = (timestamp - startTime) / 60000;
+      if (currentMile > 0) {
+        const avgPace = elapsedMinutes / currentMile;
+        const avgMin = Math.floor(avgPace);
+        const avgSec = Math.floor((avgPace - avgMin) * 60);
+        document.getElementById('averagePace').textContent =
+          `Avg Pace: ${avgMin}:${avgSec.toString().padStart(2, '0')} min/mi`;
+
+        const estFinishMinutes = avgPace * (totalMiles - currentMile);
+        const finishTime = new Date(timestamp.getTime() + estFinishMinutes * 60000);
+        document.getElementById('estFinish').textContent =
+          `Est Finish: ${finishTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      }
+
+      lastUpdateData = { mile: currentMile, time: timestamp };
+      document.getElementById('lastUpdate').textContent =
+        "Location last updated: " + timestamp.toLocaleTimeString();
+
+      elevationChart.data.datasets[1] = {
+        label: 'Current Position',
+        data: elevationData.map((val, idx) => idx === closestIndex ? val : null),
+        borderColor: 'red',
+        backgroundColor: 'red',
+        pointRadius: 5,
+        showLine: false
+      };
+      elevationChart.update();
+    }
+
+    function distance(a, b) {
+      const R = 6371000;
+      const toRad = x => x * Math.PI / 180;
+      const dLat = toRad(b[1] - a[1]);
+      const dLon = toRad(b[0] - a[0]);
+      const lat1 = toRad(a[1]);
+      const lat2 = toRad(b[1]);
+      const x = dLon * Math.cos((lat1 + lat2) / 2);
+      const y = dLat;
+      return Math.sqrt(x * x + y * y) * R;
+    }
+
+    function preloadRadarLayers() {
+      for (let i = 0; i < maxRadarLayers; i++) {
+        const layerId = `radar-layer-${i}`;
+        map.addSource(layerId, {
+          type: 'raster',
+          tiles: [`https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${OWM_API_KEY}`],
+          tileSize: 256
+        });
+        map.addLayer({
+          id: layerId,
+          type: 'raster',
+          source: layerId,
+          paint: { 'raster-opacity': 1.0 },
+          layout: { visibility: i < radarStrength ? 'visible' : 'none' }
+        });
+      }
+    }
+
+    function updateRadarVisibility(isVisible = true) {
+      for (let i = 0; i < maxRadarLayers; i++) {
+        const visibility = (isVisible && i < radarStrength) ? 'visible' : 'none';
+        if (map.getLayer(`radar-layer-${i}`)) {
+          map.setLayoutProperty(`radar-layer-${i}`, 'visibility', visibility);
+        }
+      }
+    }
+
+    function setupRadarControls() {
+      const radarToggle = document.getElementById('toggleRadar');
+      radarToggle.checked = true;
+      radarToggle.addEventListener('change', e => {
+        updateRadarVisibility(e.target.checked);
+      });
+
+      document.getElementById('refreshRadar').addEventListener('click', () => {
+        for (let i = 0; i < maxRadarLayers; i++) {
+          if (map.getLayer(`radar-layer-${i}`)) {
+            map.removeLayer(`radar-layer-${i}`);
+            map.removeSource(`radar-layer-${i}`);
+          }
+        }
+        preloadRadarLayers();
+        if (!radarToggle.checked) updateRadarVisibility(false);
+      });
+
+      document.getElementById('radarStrength').addEventListener('input', e => {
+        radarStrength = parseInt(e.target.value, 10);
+        document.getElementById('radarStrengthValue').textContent = radarStrength + 'x';
+        updateRadarVisibility(radarToggle.checked);
+      });
+    }
+
+    function setupZoomControls() {
+      document.getElementById('zoomRunner').addEventListener('click', () => {
+        const runnerPos = liveMarker.getLngLat();
+        map.flyTo({ center: runnerPos, zoom: 14 });
+      });
+      document.getElementById('zoomCourse').addEventListener('click', () => {
+        if (courseBounds) map.fitBounds(courseBounds, { padding: 40 });
+      });
+    }
+
+    document.getElementById('toggleChart').addEventListener('click', () => {
+      const mapDiv = document.getElementById('map');
+      const chartDiv = document.getElementById('elevationContainer');
+      const btn = document.getElementById('toggleChart');
+
+      if (chartDiv.style.height === '0px' || chartDiv.style.height === '0%') {
+        chartDiv.style.height = '30%';
+        chartDiv.style.opacity = 1;
+        mapDiv.style.height = '70%';
+        btn.textContent = 'Elevation ▼';
+      } else {
+        chartDiv.style.height = '0%';
+        chartDiv.style.opacity = 0;
+        mapDiv.style.height = '100%';
+        btn.textContent = 'Elevation ▲';
+      }
+      setTimeout(() => map.resize(), 400);
+    });
+  </script>
+</body>
+</html>
