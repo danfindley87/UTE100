@@ -11,7 +11,8 @@
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="config.js"></script>
+  <script src="config.js"></script> <!-- API key -->
+  <script src="data.js"></script> <!-- Local Track Data -->
 
   <style>
     body, html { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; overflow: hidden; background: #f4f6f9; }
@@ -22,7 +23,7 @@
     
     #infoPanel { position: absolute; top: 10px; left: 10px; background: rgba(255, 255, 255, 0.95); padding: 10px 14px; border-radius: 8px; font-size: 13px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); z-index: 999; }
     #infoPanel .title { font-weight: bold; font-size: 15px; margin-bottom: 6px; color: #1E3F66; }
-    #lastUpdate, #currentPace, #averagePace, #estFinish, #climbInfo, #deltaTarget { font-size: 12px; margin-top: 3px; color: #333; }
+    #lastUpdate, #averagePace, #estFinish, #climbInfo, #deltaTarget { font-size: 12px; margin-top: 3px; color: #333; }
     
     #radarControls { position: absolute; bottom: 10px; right: 10px; background: rgba(255, 255, 255, 0.95); padding: 8px 12px; border-radius: 8px; font-size: 12px; z-index: 999; width: 190px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
     #radarControls button { margin-top: 4px; display: block; width: 100%; padding: 4px; border-radius: 4px; border: 1px solid #ccc; background: #f8f9fa; cursor: pointer; font-size: 11px; }
@@ -32,8 +33,8 @@
     table.pacingTable th { background-color: #1E3F66; color: white; padding: 8px; position: sticky; top: 0; z-index: 10; }
     table.pacingTable td { padding: 8px; border-bottom: 1px solid #e0e0e0; }
     table.pacingTable tr:nth-child(even) { background-color: #f9fafb; }
-    .status-passed { color: #2e7d32; font-weight: bold; background-color: #e8f5e9 !important; }
-    .status-next { color: #c62828; font-weight: bold; background-color: #ffebee !important; animation: pulse 2s infinite; }
+    .status-passed { color: #888; text-decoration: line-through; background-color: #f0f0f0 !important; }
+    .status-next { color: #c62828; font-weight: bold; background-color: #ffebee !important; }
     .badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; display: inline-block; }
     .badge-crew { background-color: #0288d1; }
     .badge-drop { background-color: #ed6c02; }
@@ -47,10 +48,9 @@
       Mile: <span id="mile">0.0</span> | Elev: <span id="elev">0</span> ft | Left: <span id="remain">0</span> mi
       <div id="climbInfo">Climbed: 0 ft | To Go: 0 ft</div>
       <div id="lastUpdate">Location: Waiting for InReach...</div>
-      <div id="currentPace">Segment Pace: --</div>
-      <div id="averagePace">Overall Pace: --</div>
-      <div id="estFinish">Est Finish: --</div>
-      <div id="deltaTarget">Vs 30-Hr Plan: --</div>
+      <div id="averagePace" style="font-weight: bold;">Overall Pace: --</div>
+      <div id="estFinish" style="font-weight: bold; color: #2e7d32;">Est Finish: --</div>
+      <div id="deltaTarget" style="font-weight: bold; color: #B22222;">Vs 30-Hr Plan: --</div>
     </div>
 
     <div id="radarControls">
@@ -89,6 +89,8 @@
   <script>
     mapboxgl.accessToken = 'pk.eyJ1IjoiZmluczEyOSIsImEiOiJjbWRkYTAxcXIwMmdvMnJwc2xodjF4b3M5In0.58QcMA8Zo_BPNLORLz5Sug';
     const GARMIN_FEED = "https://share.garmin.com/Feed/Share/DanFindley";
+    
+    // Official Race Start Time: Adjust this exact string if the race start changes
     const RACE_START_TIME = new Date('2026-08-08T05:00:00-06:00'); // Aug 8, 5:00 AM MDT
 
     const map = new mapboxgl.Map({
@@ -175,8 +177,8 @@
       }
     }
 
-    async function initCourse() {
-      const data = await fetch('course.geojson').then(res => res.json());
+    function initCourse() {
+      const data = courseData; // Pulls strictly from the local data.js file
       const coords = data.features[0].geometry.coordinates;
       let totalDist = 0;
       let climb = 0;
@@ -236,7 +238,7 @@
         .addTo(map);
 
       map.fitBounds(courseBounds, { padding: 40 });
-      buildPacingTable(0, null);
+      buildPacingTable(0, 18.15, false);
 
       const ctx = document.getElementById('elevationChart').getContext('2d');
       elevationChart = new Chart(ctx, {
@@ -263,12 +265,9 @@
       });
     }
 
-    function buildPacingTable(currentMile, currentPaceMinMile) {
+    function buildPacingTable(currentMile, avgPace, isRaceActive) {
       const tbody = document.getElementById('aidTableBody');
       tbody.innerHTML = '';
-
-      const now = new Date();
-      let cumulativeMins = 0;
 
       aidStations.forEach((st, idx) => {
         const row = document.createElement('tr');
@@ -280,15 +279,24 @@
           statusClass = 'status-next';
         }
 
-        // Live projected ETA calculation
+        // Live projected ETA calculation mathematically derived from Race Start + (Target Mile * True Overall Pace)
         let liveEtaStr = "--";
-        if (currentMile === 0) {
+        if (st.targetMile === 0) {
           liveEtaStr = st.planEta;
+        } else if (currentMile >= st.targetMile && st.targetMile > 0) {
+          liveEtaStr = "Passed"; 
+        } else if (isRaceActive) {
+          const totalLegMins = st.targetMile * avgPace;
+          const projDate = new Date(RACE_START_TIME.getTime() + totalLegMins * 60000);
+          
+          let ampm = projDate.getHours() >= 12 ? 'PM' : 'AM';
+          let hrs = projDate.getHours() % 12 || 12;
+          let mins = projDate.getMinutes().toString().padStart(2, '0');
+          let day = projDate.getDate();
+          
+          liveEtaStr = `Aug ${day}, ${hrs}:${mins} ${ampm}`;
         } else {
-          const remMi = Math.max(0, st.targetMile - currentMile);
-          const addMins = remMi * (currentPaceMinMile || 18.15); // Fallback to 18:09 avg if needed
-          const projDate = new Date(now.getTime() + addMins * 60000);
-          liveEtaStr = projDate.toLocaleDateString([], {month:'numeric', day:'numeric'}) + ' ' + projDate.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+          liveEtaStr = st.planEta; // Pre-race display
         }
 
         row.className = statusClass;
@@ -332,27 +340,36 @@
       document.getElementById('remain').textContent = remainMiles;
       document.getElementById('climbInfo').textContent = `Climbed: ${climbedFt} ft | To Go: ${climbRemaining} ft`;
 
-      const elapsedMinutes = Math.max(1, (timestamp - RACE_START_TIME) / 60000);
-      let avgPace = 18.15;
+      // Overall Pace Calculation (Completely eliminates ping-to-ping volatile GPS drift)
+      const elapsedMinutes = (timestamp - RACE_START_TIME) / 60000;
+      let avgPace = 18.15; // 30-hour baseline pace
 
-      if (currentMile > 0.1) {
+      if (elapsedMinutes > 0 && currentMile > 0.1) {
         avgPace = elapsedMinutes / currentMile;
         const avgMin = Math.floor(avgPace);
         const avgSec = Math.floor((avgPace - avgMin) * 60);
         document.getElementById('averagePace').textContent = `Overall Pace: ${avgMin}:${avgSec.toString().padStart(2, '0')} min/mi`;
 
-        const estFinishMinutes = avgPace * (totalMiles - currentMile);
-        const finishTime = new Date(timestamp.getTime() + estFinishMinutes * 60000);
-        document.getElementById('estFinish').textContent = `Est Finish: ${finishTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        const estFinishMinutes = avgPace * totalMiles;
+        const finishTime = new Date(RACE_START_TIME.getTime() + estFinishMinutes * 60000);
         
-        // Target Delta (30-hr goal = 18.15 min/mile baseline)
+        let ampm = finishTime.getHours() >= 12 ? 'PM' : 'AM';
+        let hrs = finishTime.getHours() % 12 || 12;
+        let mins = finishTime.getMinutes().toString().padStart(2, '0');
+        document.getElementById('estFinish').textContent = `Est Finish: ${hrs}:${mins} ${ampm}`;
+        
+        // Pacing Delta compared to 30-Hour Goal
         const targetMinsAtDist = currentMile * 18.15;
         const deltaMins = Math.round(elapsedMinutes - targetMinsAtDist);
         const deltaStr = deltaMins <= 0 ? `${Math.abs(deltaMins)} mins AHEAD` : `${deltaMins} mins BEHIND`;
         document.getElementById('deltaTarget').textContent = `Vs 30-Hr Plan: ${deltaStr}`;
+      } else {
+        document.getElementById('averagePace').textContent = `Overall Pace: Pre-Race`;
+        document.getElementById('estFinish').textContent = `Est Finish: --`;
+        document.getElementById('deltaTarget').textContent = `Vs 30-Hr Plan: --`;
       }
 
-      buildPacingTable(currentMile, avgPace);
+      buildPacingTable(currentMile, avgPace, elapsedMinutes > 0);
 
       lastUpdateData = { mile: currentMile, time: timestamp };
       document.getElementById('lastUpdate').textContent = "Location: " + timestamp.toLocaleTimeString();
