@@ -18,9 +18,10 @@
     
     #map { width: 100%; height: 100%; position: relative; transition: height 0.3s ease; }
     
-    #elevationContainer { width: 100%; height: 0%; background: white; transition: height 0.3s ease, border-color 0.3s; overflow: hidden; }
-    .chart-wrapper { padding: 10px; height: 100%; box-sizing: border-box; }
-    #elevationChart { width: 100%; height: 100%; max-height: 200px; }
+    #elevationContainer { width: 100%; height: 0%; background: white; transition: height 0.3s ease, border-color 0.3s; overflow: hidden; position: relative; }
+    /* FIXED: Removed max-height and ensured absolute fill with padding for labels */
+    .chart-wrapper { position: absolute; top: 0; left: 0; right: 0; bottom: 0; padding: 15px 15px 35px 15px; box-sizing: border-box; }
+    #elevationChart { width: 100%; height: 100%; display: block; }
     
     #tableContainer { width: 100%; height: 0%; overflow-y: auto; background: #ffffff; transition: height 0.3s ease; }
     .table-wrapper { padding: 10px; }
