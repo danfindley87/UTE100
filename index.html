@@ -158,20 +158,14 @@
     let isNightMode = false;
     let isSatellite = false;
     let initialLoadComplete = false;
-    let activePanel = 'none';
+    let activePanel = 'none'; 
 
-    // Advanced marker creator (now supports permanent text labels underneath)
-    function createCustomMarker(emoji, color = 'black', withBg = false, fontSize = '20px', bgSize = '32px', labelText = '') {
-      const wrapper = document.createElement('div');
-      wrapper.style.display = 'flex';
-      wrapper.style.flexDirection = 'column';
-      wrapper.style.alignItems = 'center';
-      wrapper.style.pointerEvents = 'none'; 
-
+    function createCustomMarker(emoji, color = 'black', withBg = false, fontSize = '20px', bgSize = '32px') {
       const el = document.createElement('div');
       el.style.fontSize = fontSize;
       el.style.color = color;
       el.style.textAlign = 'center';
+      el.style.cursor = 'pointer';
       el.textContent = emoji;
       if (withBg) {
         el.style.background = 'white';
@@ -183,30 +177,11 @@
         el.style.alignItems = 'center';
         el.style.boxShadow = '0 0 5px rgba(0,0,0,0.5)';
       }
-      wrapper.appendChild(el);
-
-      if (labelText) {
-        const lbl = document.createElement('div');
-        lbl.innerHTML = labelText;
-        lbl.style.background = 'rgba(255,255,255,0.95)';
-        lbl.style.border = '1px solid #ccc';
-        lbl.style.padding = '3px 5px';
-        lbl.style.borderRadius = '4px';
-        lbl.style.fontSize = '10px';
-        lbl.style.fontWeight = 'bold';
-        lbl.style.color = '#1E3F66';
-        lbl.style.marginTop = '4px';
-        lbl.style.whiteSpace = 'nowrap';
-        lbl.style.textAlign = 'center';
-        lbl.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
-        wrapper.appendChild(lbl);
-      }
-
-      return wrapper;
+      return el;
     }
 
     const aidStations = [
-      { name: "Start", targetMile: 0.0, legMi: 0, gain: "+0", loss: "-0", planEta: "Aug 8, 5:00 AM", notes: "Start w/ Headlamp & Gloves" },
+      { name: "Start", targetMile: 0.0, legMi: 0, gain: "+0", loss: "-0", planEta: "Aug 8, 5:00 AM", coords: null, notes: "Start w/ Headlamp & Gloves" },
       { name: "Upper Porcupine 1", targetMile: 6.5, legMi: 6.5, gain: "+516", loss: "-1094", planEta: "Aug 8, 6:16 AM", notes: "<span class='badge badge-crew'>Crew</span> Drop Headlamp & Gloves" },
       { name: "Upper Porcupine 2", targetMile: 15.4, legMi: 8.9, gain: "+1500", loss: "-1556", planEta: "Aug 8, 8:10 AM", notes: "<span class='badge badge-crew'>Crew</span> Warming Up - Hydrate" },
       { name: "Hazardous 1", targetMile: 23.2, legMi: 7.8, gain: "+2294", loss: "-241", planEta: "Aug 8, 10:44 AM", notes: "<span class='badge badge-drop'>Drop Bag</span> Peak Heat Climb" },
@@ -221,15 +196,15 @@
       { name: "Finish", targetMile: 99.2, legMi: 11.2, gain: "+2897", loss: "-4339", planEta: "Aug 9, 11:00 AM", notes: "Final 11.2 Mi Push to Buckle!" }
     ];
 
-    // Consolidated static map markers with visible dual-labels
+    // Grouped popups for map icons
     const groupedMarkers = [
-      { name: "Upper Porcupine<br>(Mi 6.5 & 15.4)", coords: [-109.358628, 38.578562] },
-      { name: "Hazardous<br>(Mi 23.2 & 88.0)", coords: [-109.2815, 38.5255] },
-      { name: "Geyser<br>(Mi 32.0 & 81.0)", coords: [-109.22586, 38.47884] },
-      { name: "Dark Canyon<br>(Mi 42.2)", coords: [-109.17981, 38.41583] },
-      { name: "Winter Creek<br>(Mi 47.7)", coords: [-109.18627, 38.36465] },
-      { name: "South Mountain<br>(Mi 56.8 & 67.7)", coords: [-109.251646, 38.418903] },
-      { name: "Squaw Springs<br>(Mi 75.4)", coords: [-109.2898, 38.47916] }
+      { name: "Upper Porcupine", miles: "Mi 6.5 & 15.4", coords: [-109.358628, 38.578562] },
+      { name: "Hazardous", miles: "Mi 23.2 & 88.0", coords: [-109.2815, 38.5255] },
+      { name: "Geyser", miles: "Mi 32.0 & 81.0", coords: [-109.22586, 38.47884] },
+      { name: "Dark Canyon", miles: "Mi 42.2", coords: [-109.17981, 38.41583] },
+      { name: "Winter Creek", miles: "Mi 47.7", coords: [-109.18627, 38.36465] },
+      { name: "South Mountain", miles: "Mi 56.8 & 67.7", coords: [-109.251646, 38.418903] },
+      { name: "Squaw Springs", miles: "Mi 75.4", coords: [-109.2898, 38.47916] }
     ];
 
     let elevationChart;
@@ -245,8 +220,8 @@
     const maxRadarLayers = 20;
 
     // --- GPX ARTIFACT SMOOTHING ALGORITHMS ---
-    // 1. Median Filter (Removes extreme 1-point downward spikes)
-    function removeElevationSpikes(data, windowSize = 5) {
+    // Aggressive Median Filter (Window 25) to kill wider GPX drops
+    function removeElevationSpikes(data, windowSize = 25) {
       let result = [];
       let half = Math.floor(windowSize / 2);
       for (let i = 0; i < data.length; i++) {
@@ -260,8 +235,8 @@
       return result;
     }
     
-    // 2. Moving Average (Lightly softens the remaining curve)
-    function smoothElevation(data, windowSize = 3) {
+    // Moving Average (Window 9) to smooth the curve naturally
+    function smoothElevation(data, windowSize = 9) {
       let result = [];
       let half = Math.floor(windowSize / 2);
       for (let i = 0; i < data.length; i++) {
@@ -299,17 +274,17 @@
           source: 'course',
           paint: { 'line-color': '#FF4500', 'line-width': 4, 'line-blur': 1 }
         });
-        
-        // Ensure arrows get redrawn on style change
+
+        // Ensure arrows stay on top after style change
         map.addLayer({
           id: 'course-arrows',
           type: 'symbol',
           source: 'course',
           layout: {
             'symbol-placement': 'line',
-            'symbol-spacing': 75,
+            'symbol-spacing': 80,
             'text-field': '▶',
-            'text-size': 14,
+            'text-size': 16,
             'text-keep-upright': false
           },
           paint: {
@@ -369,9 +344,9 @@
         coursePoints.push([coords[i][0], coords[i][1]]);
       }
 
-      // Apply the smoothing filters to fix GPX artifact drops
-      let cleanedElevData = removeElevationSpikes(rawElevData, 5);
-      elevationData = smoothElevation(cleanedElevData, 3);
+      // Apply the aggressive artifact removal algorithms
+      let cleanedElevData = removeElevationSpikes(rawElevData, 25);
+      elevationData = smoothElevation(cleanedElevData, 9);
 
       totalClimb = Math.round(climb);
       totalMiles = (totalDist / 1609.34).toFixed(1);
@@ -400,9 +375,9 @@
           source: 'course',
           layout: {
             'symbol-placement': 'line',
-            'symbol-spacing': 75,
+            'symbol-spacing': 80,
             'text-field': '▶',
-            'text-size': 14,
+            'text-size': 16,
             'text-keep-upright': false
           },
           paint: {
@@ -413,20 +388,24 @@
         });
       }
 
-      // Permanent Floating Labels for grouped Aid Stations
+      // Add Standard Click-to-Open Popups for Aid Stations
       groupedMarkers.forEach(station => {
-        new mapboxgl.Marker({ element: createCustomMarker('✚', '#d32f2f', true, '18px', '30px', station.name) })
+        const popupContent = `<div style="text-align:center; font-family:sans-serif;"><strong>${station.name}</strong><br><span style="font-size:11px; color:#666;">${station.miles}</span></div>`;
+        new mapboxgl.Marker({ element: createCustomMarker('✚', '#d32f2f', true, '18px', '30px') })
           .setLngLat(station.coords)
+          .setPopup(new mapboxgl.Popup({ offset: 15, closeButton: false }).setHTML(popupContent))
           .addTo(map);
       });
 
-      // Start & Finish Permanent Labels
-      new mapboxgl.Marker({ element: createCustomMarker('🏳️', 'green', true, '18px', '30px', 'Start (Mi 0.0)') })
+      // Start & Finish Flags
+      new mapboxgl.Marker({ element: createCustomMarker('🏳️', 'green', true, '18px', '30px') })
         .setLngLat(coursePoints[0])
+        .setPopup(new mapboxgl.Popup({ offset: 15, closeButton: false }).setHTML('<div style="text-align:center;"><strong>Start</strong><br><span style="font-size:11px; color:#666;">Mi 0.0</span></div>'))
         .addTo(map);
 
-      new mapboxgl.Marker({ element: createCustomMarker('🏁', 'black', true, '18px', '30px', 'Finish (Mi 99.2)') })
+      new mapboxgl.Marker({ element: createCustomMarker('🏁', 'black', true, '18px', '30px') })
         .setLngLat(coursePoints[coursePoints.length - 1])
+        .setPopup(new mapboxgl.Popup({ offset: 15, closeButton: false }).setHTML('<div style="text-align:center;"><strong>Finish</strong><br><span style="font-size:11px; color:#666;">Mi 99.2</span></div>'))
         .addTo(map);
 
       map.fitBounds(courseBounds, { padding: 40 });
@@ -655,7 +634,6 @@
     }
 
     function setupUIControls() {
-      // Panel Toggles
       document.getElementById('btnElevation').addEventListener('click', () => {
         activePanel = activePanel === 'elevation' ? 'none' : 'elevation';
         updatePanels();
@@ -666,7 +644,6 @@
         updatePanels();
       });
 
-      // Settings Modal Toggles
       document.getElementById('btnSettings').addEventListener('click', () => {
         document.getElementById('settingsMenu').style.display = 'flex';
       });
@@ -674,8 +651,7 @@
         document.getElementById('settingsMenu').style.display = 'none';
       });
 
-      // Radar Controls
-      document.getElementById('toggleRadar').checked = false; // Default OFF
+      document.getElementById('toggleRadar').checked = false; 
       document.getElementById('toggleRadar').addEventListener('change', e => updateRadarVisibility(e.target.checked));
 
       document.getElementById('refreshRadar').addEventListener('click', () => {
@@ -694,7 +670,6 @@
         updateRadarVisibility(document.getElementById('toggleRadar').checked);
       });
 
-      // Map Style Toggles
       document.getElementById('toggleNight').addEventListener('click', () => {
         isNightMode = !isNightMode;
         document.body.classList.toggle('dark-mode', isNightMode);
