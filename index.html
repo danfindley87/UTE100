@@ -112,6 +112,7 @@
     mapboxgl.accessToken = 'pk.eyJ1IjoiZmluczEyOSIsImEiOiJjbWRkYTAxcXIwMmdvMnJwc2xodjF4b3M5In0.58QcMA8Zo_BPNLORLz5Sug';
     const GARMIN_FEED = "https://share.garmin.com/Feed/Share/DanFindley";
     
+    // Official Race Start Time
     const RACE_START_TIME = new Date('2026-08-08T05:00:00-06:00');
 
     const map = new mapboxgl.Map({
@@ -175,17 +176,27 @@
 
     map.on('load', () => {
       initCourse();
-      setupRadarControls();
-      setupZoomControls();
       fetchGarminLocation();
       setInterval(fetchGarminLocation, 120000); 
     });
 
-    // Handle Map Style Changes (Satellite / Dark Mode)
+    // The magical event that fires every time you toggle Satellite or Night mode
     map.on('style.load', () => {
-      addCourseToMap();
+      // 1. Re-add radar layers FIRST
       preloadRadarLayers();
-      updateRadarVisibility(document.getElementById('toggleRadar').checked);
+      const radarToggle = document.getElementById('toggleRadar');
+      if (radarToggle) updateRadarVisibility(radarToggle.checked);
+
+      // 2. Re-add the course line ON TOP of the radar
+      if (window.courseDataGeoJson && !map.getSource('course')) {
+        map.addSource('course', { type: 'geojson', data: window.courseDataGeoJson });
+        map.addLayer({
+          id: 'course-line',
+          type: 'line',
+          source: 'course',
+          paint: { 'line-color': '#FF4500', 'line-width': 4, 'line-blur': 1 }
+        });
+      }
     });
 
     async function fetchGarminLocation() {
@@ -209,7 +220,7 @@
 
     async function initCourse() {
       const data = await fetch('course.geojson').then(res => res.json());
-      window.courseDataGeoJson = data; // Save for style switching
+      window.courseDataGeoJson = data; // Save it globally so the style toggler can use it
 
       const coords = data.features[0].geometry.coordinates;
       let totalDist = 0;
@@ -249,8 +260,15 @@
           document.getElementById('elev').textContent = elevationData[0].toFixed(0);
       }
 
-      if (map.isStyleLoaded()) {
-          addCourseToMap();
+      // Draw it manually the very first time
+      if (map.isStyleLoaded() && !map.getSource('course')) {
+        map.addSource('course', { type: 'geojson', data: window.courseDataGeoJson });
+        map.addLayer({
+          id: 'course-line',
+          type: 'line',
+          source: 'course',
+          paint: { 'line-color': '#FF4500', 'line-width': 4, 'line-blur': 1 }
+        });
       }
 
       aidStations.forEach(station => {
@@ -298,19 +316,9 @@
           plugins: { legend: { display: false } }
         }
       });
-    }
 
-    function addCourseToMap() {
-      if (!window.courseDataGeoJson || !map.isStyleLoaded()) return;
-      if (!map.getSource('course')) {
-        map.addSource('course', { type: 'geojson', data: window.courseDataGeoJson });
-        map.addLayer({
-          id: 'course-line',
-          type: 'line',
-          source: 'course',
-          paint: { 'line-color': '#FF4500', 'line-width': 4, 'line-blur': 1 }
-        });
-      }
+      setupRadarControls();
+      setupZoomControls();
     }
 
     function buildPacingTable(currentMile, avgPace, isRaceActive) {
@@ -377,7 +385,7 @@
       }
 
       const currentMile = (traveledDist / 1609.34);
-      const remainMiles = (totalMiles - currentMile).toFixed(1);
+      const remainMiles = Math.max(0, (totalMiles - currentMile)).toFixed(1);
       const currentElev = elevationData[closestIndex].toFixed(0);
       const climbedFt = Math.round(climbed);
       const climbRemaining = Math.max(0, totalClimb - climbedFt);
@@ -443,7 +451,6 @@
     }
 
     function preloadRadarLayers() {
-      if (!map.isStyleLoaded()) return;
       for (let i = 0; i < maxRadarLayers; i++) {
         const layerId = `radar-layer-${i}`;
         if (!map.getSource(layerId)) {
