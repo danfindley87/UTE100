@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Ute 100 Live Tracker</title>
+  <title>Ute 100 Live Tracker & Pacing Dashboard</title>
 
   <!-- Mapbox -->
   <script src="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.js"></script>
@@ -11,73 +11,105 @@
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="config.js"></script> <!-- API key -->
+  <script src="config.js"></script>
 
   <style>
-    body, html { margin: 0; padding: 0; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
-    #map { width: 100%; height: 70%; position: relative; transition: height 0.3s ease; }
-    #elevationContainer { width: 100%; height: 30%; transition: height 0.3s ease, opacity 0.3s ease; opacity: 1; background: white; overflow: hidden; }
-    #elevationChart { width: 100%; height: 100%; max-height: 300px; }
-    #toggleChart { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 1000; background: rgba(255,255,255,0.9); border: 1px solid #ccc; border-radius: 4px; cursor: pointer; padding: 6px 12px; font-size: 14px; font-weight: bold; box-shadow: 0 0 4px rgba(0,0,0,0.3); }
-    #infoPanel { position: absolute; top: 10px; left: 10px; background: rgba(255, 255, 255, 0.9); padding: 8px 12px; border-radius: 8px; font-family: Arial, sans-serif; font-size: 14px; box-shadow: 0 0 5px rgba(0,0,0,0.3); z-index: 999; }
-    #lastUpdate, #currentPace, #averagePace, #estFinish, #climbInfo { font-size: 12px; margin-top: 4px; color: #333; }
-    #radarControls { position: absolute; bottom: 10px; right: 10px; background: rgba(255, 255, 255, 0.9); padding: 8px 12px; border-radius: 8px; font-size: 14px; font-family: Arial, sans-serif; z-index: 999; width: 200px; }
-    #radarControls button { margin-top: 4px; display: block; width: 100%; }
-    #radarStrength { width: 100%; }
-    #radarStrengthLabel { font-size: 12px; display: block; margin-top: 4px; }
+    body, html { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; overflow: hidden; background: #f4f6f9; }
+    #map { width: 100%; height: 50%; position: relative; transition: height 0.3s ease; }
+    #elevationContainer { width: 100%; height: 20%; background: white; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; }
+    #elevationChart { width: 100%; height: 100%; max-height: 200px; }
+    #tableContainer { width: 100%; height: 30%; overflow-y: auto; background: #ffffff; padding: 10px; box-sizing: border-box; }
+    
+    #infoPanel { position: absolute; top: 10px; left: 10px; background: rgba(255, 255, 255, 0.95); padding: 10px 14px; border-radius: 8px; font-size: 13px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); z-index: 999; }
+    #infoPanel .title { font-weight: bold; font-size: 15px; margin-bottom: 6px; color: #1E3F66; }
+    #lastUpdate, #currentPace, #averagePace, #estFinish, #climbInfo, #deltaTarget { font-size: 12px; margin-top: 3px; color: #333; }
+    
+    #radarControls { position: absolute; bottom: 10px; right: 10px; background: rgba(255, 255, 255, 0.95); padding: 8px 12px; border-radius: 8px; font-size: 12px; z-index: 999; width: 190px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+    #radarControls button { margin-top: 4px; display: block; width: 100%; padding: 4px; border-radius: 4px; border: 1px solid #ccc; background: #f8f9fa; cursor: pointer; font-size: 11px; }
+
+    /* Aid Station Table Styling */
+    table.pacingTable { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+    table.pacingTable th { background-color: #1E3F66; color: white; padding: 8px; position: sticky; top: 0; z-index: 10; }
+    table.pacingTable td { padding: 8px; border-bottom: 1px solid #e0e0e0; }
+    table.pacingTable tr:nth-child(even) { background-color: #f9fafb; }
+    .status-passed { color: #2e7d32; font-weight: bold; background-color: #e8f5e9 !important; }
+    .status-next { color: #c62828; font-weight: bold; background-color: #ffebee !important; animation: pulse 2s infinite; }
+    .badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; display: inline-block; }
+    .badge-crew { background-color: #0288d1; }
+    .badge-drop { background-color: #ed6c02; }
+    .badge-gear { background-color: #7b1fa2; }
   </style>
 </head>
 <body>
   <div id="map">
     <div id="infoPanel">
-      Mile: <span id="mile">0</span> | 
-      Elev: <span id="elev">0</span> ft | 
-      Remain: <span id="remain">0</span> mi
+      <div class="title">Ute 100 Tracker</div>
+      Mile: <span id="mile">0.0</span> | Elev: <span id="elev">0</span> ft | Left: <span id="remain">0</span> mi
       <div id="climbInfo">Climbed: 0 ft | To Go: 0 ft</div>
-      <div id="lastUpdate">Location last updated: waiting...</div>
-      <div id="currentPace">Current Pace: --</div>
-      <div id="averagePace">Avg Pace: --</div>
+      <div id="lastUpdate">Location: Waiting for InReach...</div>
+      <div id="currentPace">Segment Pace: --</div>
+      <div id="averagePace">Overall Pace: --</div>
       <div id="estFinish">Est Finish: --</div>
+      <div id="deltaTarget">Vs 30-Hr Plan: --</div>
     </div>
+
     <div id="radarControls">
-      <input type="checkbox" id="toggleRadar" checked> Weather Radar 🌧 <br>
-      <label id="radarStrengthLabel" for="radarStrength">
-        Radar Strength: <span id="radarStrengthValue">10x</span>
-      </label>
+      <input type="checkbox" id="toggleRadar" checked> Weather Radar 🌧<br>
+      <label for="radarStrength" style="font-size:11px;">Radar Opacity:</label>
       <input type="range" id="radarStrength" min="1" max="20" value="10">
       <button id="refreshRadar">🔄 Refresh Radar</button>
-      <button id="zoomRunner">🔍 Zoom to Runner</button>
+      <button id="zoomRunner">🏃 Zoom to Runner</button>
       <button id="zoomCourse">🗺️ Zoom to Course</button>
     </div>
-    <button id="toggleChart">Elevation ▼</button>
   </div>
+
   <div id="elevationContainer">
     <canvas id="elevationChart"></canvas>
+  </div>
+
+  <div id="tableContainer">
+    <table class="pacingTable">
+      <thead>
+        <tr>
+          <th>Aid Station</th>
+          <th>Mile</th>
+          <th>Plan ETA (30h)</th>
+          <th>Live Projected ETA</th>
+          <th>Leg Mi</th>
+          <th>Gain/Loss</th>
+          <th>Logistics & Gear Notes</th>
+        </tr>
+      </thead>
+      <tbody id="aidTableBody">
+        <!-- Dynamically Populated -->
+      </tbody>
+    </table>
   </div>
 
   <script>
     mapboxgl.accessToken = 'pk.eyJ1IjoiZmluczEyOSIsImEiOiJjbWRkYTAxcXIwMmdvMnJwc2xodjF4b3M5In0.58QcMA8Zo_BPNLORLz5Sug';
     const GARMIN_FEED = "https://share.garmin.com/Feed/Share/DanFindley";
+    const RACE_START_TIME = new Date('2026-08-08T05:00:00-06:00'); // Aug 8, 5:00 AM MDT
 
     const map = new mapboxgl.Map({
       container: 'map',
       style: 'mapbox://styles/mapbox/outdoors-v12',
-      center: [-109.25, 38.50], // Fallback center for La Sal Mountains
+      center: [-109.25, 38.50],
       zoom: 10
     });
     map.addControl(new mapboxgl.NavigationControl());
 
     function createCustomMarker(emoji, color = 'black', withBg = false) {
       const el = document.createElement('div');
-      el.style.fontSize = '22px';
+      el.style.fontSize = '20px';
       el.style.color = color;
       el.style.textAlign = 'center';
       el.textContent = emoji;
       if (withBg) {
         el.style.background = 'white';
         el.style.borderRadius = '50%';
-        el.style.width = '30px';
-        el.style.height = '30px';
+        el.style.width = '28px';
+        el.style.height = '28px';
         el.style.display = 'flex';
         el.style.justifyContent = 'center';
         el.style.alignItems = 'center';
@@ -86,19 +118,21 @@
       return el;
     }
 
-    // Dynamic Aid Stations mapped to the Ute 100 pacing spreadsheet
+    // Ute 100 Aid Station Data matched to 30-Hour Plan
     const aidStations = [
-      { name: "Upper Porcupine (Mile 6.5)", targetMile: 6.5, coords: null },
-      { name: "Upper Porcupine 2 (Mile 15.4)", targetMile: 15.4, coords: null },
-      { name: "Hazardous (Mile 23.2)", targetMile: 23.2, coords: null },
-      { name: "Geyser (Mile 32.0)", targetMile: 32.0, coords: null },
-      { name: "Dark Canyon (Mile 42.2)", targetMile: 42.2, coords: null },
-      { name: "Winter Creek (Mile 47.7)", targetMile: 47.7, coords: null },
-      { name: "South Mountain (Mile 56.8)", targetMile: 56.8, coords: null },
-      { name: "South Mountain 2 (Mile 67.7)", targetMile: 67.7, coords: null },
-      { name: "Squaw Springs (Mile 75.4)", targetMile: 75.4, coords: null },
-      { name: "Geyser 2 (Mile 81.0)", targetMile: 81.0, coords: null },
-      { name: "Hazardous 2 (Mile 88.0)", targetMile: 88.0, coords: null }
+      { name: "Start", targetMile: 0.0, legMi: 0, gain: "+0", loss: "-0", planEta: "Aug 8, 5:00 AM", coords: null, notes: "Start w/ Headlamp & Gloves" },
+      { name: "Upper Porcupine 1", targetMile: 6.5, legMi: 6.5, gain: "+516", loss: "-1094", planEta: "Aug 8, 6:16 AM", coords: null, notes: "<span class='badge badge-crew'>Crew</span> Drop Headlamp & Gloves" },
+      { name: "Upper Porcupine 2", targetMile: 15.4, legMi: 8.9, gain: "+1500", loss: "-1556", planEta: "Aug 8, 8:10 AM", coords: null, notes: "<span class='badge badge-crew'>Crew</span> Warming Up - Hydrate" },
+      { name: "Hazardous 1", targetMile: 23.2, legMi: 7.8, gain: "+2294", loss: "-241", planEta: "Aug 8, 10:44 AM", coords: null, notes: "<span class='badge badge-drop'>Drop Bag</span> Peak Heat Climb" },
+      { name: "Geyser 1", targetMile: 32.0, legMi: 8.8, gain: "+3293", loss: "-2109", planEta: "Aug 8, 1:58 PM", coords: null, notes: "<span class='badge badge-drop'>Drop Bag</span> Afternoon Push" },
+      { name: "Dark Canyon", targetMile: 42.2, legMi: 10.2, gain: "+506", loss: "-1824", planEta: "Aug 8, 4:01 PM", coords: null, notes: "<span class='badge badge-crew'>Crew</span> Cruising Descent" },
+      { name: "Winter Creek", targetMile: 47.7, legMi: 5.5, gain: "+36", loss: "-1510", planEta: "Aug 8, 5:06 PM", coords: null, notes: "<span class='badge badge-crew'>Crew</span> Grab Headlamp just in case" },
+      { name: "South Mountain 1", targetMile: 56.8, legMi: 9.1, gain: "+2515", loss: "-54", planEta: "Aug 8, 7:54 PM", coords: null, notes: "<span class='badge badge-crew'>Crew</span> <span class='badge badge-drop'>Drop Bag</span> <span class='badge badge-gear'>Jacket/Gloves</span>" },
+      { name: "South Mountain 2", targetMile: 67.7, legMi: 10.9, gain: "+2787", loss: "-2980", planEta: "Aug 8, 11:48 PM", coords: null, notes: "<span class='badge badge-crew'>Crew</span> <span class='badge badge-drop'>Drop Bag</span> Night Loop Complete" },
+      { name: "Squaw Springs", targetMile: 75.4, legMi: 7.7, gain: "+928", loss: "-1964", planEta: "Aug 9, 2:33 AM", coords: null, notes: "<span class='badge badge-crew'>Crew</span> Pre-Dawn Cold" },
+      { name: "Geyser 2", targetMile: 81.0, legMi: 5.6, gain: "+1648", loss: "-179", planEta: "Aug 9, 4:42 AM", coords: null, notes: "<span class='badge badge-drop'>Drop Bag</span> Sun Opening Up" },
+      { name: "Hazardous 2", targetMile: 88.0, legMi: 7.0, gain: "+848", loss: "-1966", planEta: "Aug 9, 7:00 AM", coords: null, notes: "<span class='badge badge-drop'>Drop Bag</span> Drop Headlamp & Heavy Layers" },
+      { name: "Finish", targetMile: 99.2, legMi: 11.2, gain: "+2897", loss: "-4339", planEta: "Aug 9, 11:00 AM", coords: null, notes: "Final 11.2 Mi Push to Buckle!" }
     ];
 
     let elevationChart;
@@ -109,7 +143,6 @@
     let totalClimb = 0;
     const liveMarker = new mapboxgl.Marker({ element: createCustomMarker('🏃‍♂️', 'black', true) });
     let courseBounds;
-    let startTime = null;
     let lastUpdateData = { mile: 0, time: null };
     let radarStrength = 10;
     const maxRadarLayers = 20;
@@ -120,19 +153,19 @@
       setupRadarControls();
       setupZoomControls();
       fetchGarminLocation();
-      setInterval(fetchGarminLocation, 120000); // every 2 mins
+      setInterval(fetchGarminLocation, 120000); 
     });
 
     async function fetchGarminLocation() {
       const CORS_PROXY = "https://corsproxy.io/?";
       try {
         const response = await fetch(`${CORS_PROXY}${GARMIN_FEED}`);
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        if (!response.ok) throw new Error(`HTTP status: ${response.status}`);
         const kmlText = await response.text();
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(kmlText, "application/xml");
         const coordElement = xmlDoc.querySelector("coordinates");
-        if (!coordElement) throw new Error("No coordinates found in KML");
+        if (!coordElement) throw new Error("No coordinates found");
 
         const [lng, lat] = coordElement.textContent.trim().split(",").map(Number);
         liveMarker.setLngLat([lng, lat]).addTo(map);
@@ -159,7 +192,6 @@
         
         const currentMile = totalDist / 1609.34;
         
-        // Dynamically find aid station coordinates based on cumulative distance
         aidStations.forEach(station => {
             if (!station.coords && currentMile >= station.targetMile) {
                 station.coords = [coords[i][0], coords[i][1]];
@@ -184,7 +216,6 @@
         paint: { 'line-color': '#FF4500', 'line-width': 4, 'line-blur': 1 }
       });
 
-      // Plot dynamic aid stations
       aidStations.forEach(station => {
         if(station.coords) {
             new mapboxgl.Marker({ element: createCustomMarker('✚', 'red') })
@@ -204,8 +235,8 @@
         .setPopup(new mapboxgl.Popup().setText("Finish"))
         .addTo(map);
 
-      // Auto-zoom to fit the Ute 100 course perfectly
       map.fitBounds(courseBounds, { padding: 40 });
+      buildPacingTable(0, null);
 
       const ctx = document.getElementById('elevationChart').getContext('2d');
       elevationChart = new Chart(ctx, {
@@ -215,7 +246,7 @@
           datasets: [{
             label: 'Elevation (ft)',
             data: elevationData,
-            borderColor: 'blue',
+            borderColor: '#1E3F66',
             fill: false,
             pointRadius: 0
           }]
@@ -224,27 +255,62 @@
           responsive: true,
           maintainAspectRatio: false,
           scales: {
-            x: {
-              title: { display: true, text: 'Distance (mi)' },
-              ticks: { callback: function(value) { return this.getLabelForValue(value).toFixed(1); } }
-            },
-            y: { title: { display: true, text: 'Elevation (ft)' } }
+            x: { title: { display: true, text: 'Distance (mi)' }, ticks: { callback: function(val) { return this.getLabelForValue(val).toFixed(1); } } },
+            y: { title: { display: true, text: 'Elev (ft)' } }
           },
           plugins: { legend: { display: false } }
         }
       });
     }
 
+    function buildPacingTable(currentMile, currentPaceMinMile) {
+      const tbody = document.getElementById('aidTableBody');
+      tbody.innerHTML = '';
+
+      const now = new Date();
+      let cumulativeMins = 0;
+
+      aidStations.forEach((st, idx) => {
+        const row = document.createElement('tr');
+        
+        let statusClass = '';
+        if (currentMile >= st.targetMile && st.targetMile > 0) {
+          statusClass = 'status-passed';
+        } else if (currentMile < st.targetMile && (idx === 0 || currentMile >= aidStations[idx-1].targetMile)) {
+          statusClass = 'status-next';
+        }
+
+        // Live projected ETA calculation
+        let liveEtaStr = "--";
+        if (currentMile === 0) {
+          liveEtaStr = st.planEta;
+        } else {
+          const remMi = Math.max(0, st.targetMile - currentMile);
+          const addMins = remMi * (currentPaceMinMile || 18.15); // Fallback to 18:09 avg if needed
+          const projDate = new Date(now.getTime() + addMins * 60000);
+          liveEtaStr = projDate.toLocaleDateString([], {month:'numeric', day:'numeric'}) + ' ' + projDate.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+        }
+
+        row.className = statusClass;
+        row.innerHTML = `
+          <td><strong>${st.name}</strong></td>
+          <td>${st.targetMile}</td>
+          <td>${st.planEta}</td>
+          <td><strong>${liveEtaStr}</strong></td>
+          <td>${st.legMi} mi</td>
+          <td>${st.gain} / ${st.loss}</td>
+          <td>${st.notes}</td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
     function updateElevationMarker(lng, lat, timestamp) {
-      if (!startTime) startTime = timestamp;
       let closestIndex = 0;
       let minDist = Infinity;
       for (let i = 0; i < coursePoints.length; i++) {
         const d = distance([lng, lat], coursePoints[i]);
-        if (d < minDist) {
-          minDist = d;
-          closestIndex = i;
-        }
+        if (d < minDist) { minDist = d; closestIndex = i; }
       }
 
       let traveledDist = 0;
@@ -266,42 +332,37 @@
       document.getElementById('remain').textContent = remainMiles;
       document.getElementById('climbInfo').textContent = `Climbed: ${climbedFt} ft | To Go: ${climbRemaining} ft`;
 
-      if (lastUpdateData.time && timestamp) {
-        const timeDiff = (timestamp - lastUpdateData.time) / 60000;
-        const distDiff = currentMile - lastUpdateData.mile;
-        if (distDiff > 0.01) {
-          const pace = timeDiff / distDiff;
-          const paceMin = Math.floor(pace);
-          const paceSec = Math.floor((pace - paceMin) * 60);
-          document.getElementById('currentPace').textContent = 
-            `Current Pace: ${paceMin}:${paceSec.toString().padStart(2, '0')} min/mi`;
-        }
-      }
+      const elapsedMinutes = Math.max(1, (timestamp - RACE_START_TIME) / 60000);
+      let avgPace = 18.15;
 
-      const elapsedMinutes = (timestamp - startTime) / 60000;
-      if (currentMile > 0) {
-        const avgPace = elapsedMinutes / currentMile;
+      if (currentMile > 0.1) {
+        avgPace = elapsedMinutes / currentMile;
         const avgMin = Math.floor(avgPace);
         const avgSec = Math.floor((avgPace - avgMin) * 60);
-        document.getElementById('averagePace').textContent =
-          `Avg Pace: ${avgMin}:${avgSec.toString().padStart(2, '0')} min/mi`;
+        document.getElementById('averagePace').textContent = `Overall Pace: ${avgMin}:${avgSec.toString().padStart(2, '0')} min/mi`;
 
         const estFinishMinutes = avgPace * (totalMiles - currentMile);
         const finishTime = new Date(timestamp.getTime() + estFinishMinutes * 60000);
-        document.getElementById('estFinish').textContent =
-          `Est Finish: ${finishTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        document.getElementById('estFinish').textContent = `Est Finish: ${finishTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        
+        // Target Delta (30-hr goal = 18.15 min/mile baseline)
+        const targetMinsAtDist = currentMile * 18.15;
+        const deltaMins = Math.round(elapsedMinutes - targetMinsAtDist);
+        const deltaStr = deltaMins <= 0 ? `${Math.abs(deltaMins)} mins AHEAD` : `${deltaMins} mins BEHIND`;
+        document.getElementById('deltaTarget').textContent = `Vs 30-Hr Plan: ${deltaStr}`;
       }
 
+      buildPacingTable(currentMile, avgPace);
+
       lastUpdateData = { mile: currentMile, time: timestamp };
-      document.getElementById('lastUpdate').textContent =
-        "Location last updated: " + timestamp.toLocaleTimeString();
+      document.getElementById('lastUpdate').textContent = "Location: " + timestamp.toLocaleTimeString();
 
       elevationChart.data.datasets[1] = {
         label: 'Current Position',
         data: elevationData.map((val, idx) => idx === closestIndex ? val : null),
         borderColor: 'red',
         backgroundColor: 'red',
-        pointRadius: 5,
+        pointRadius: 6,
         showLine: false
       };
       elevationChart.update();
@@ -349,9 +410,7 @@
     function setupRadarControls() {
       const radarToggle = document.getElementById('toggleRadar');
       radarToggle.checked = true;
-      radarToggle.addEventListener('change', e => {
-        updateRadarVisibility(e.target.checked);
-      });
+      radarToggle.addEventListener('change', e => updateRadarVisibility(e.target.checked));
 
       document.getElementById('refreshRadar').addEventListener('click', () => {
         for (let i = 0; i < maxRadarLayers; i++) {
@@ -366,7 +425,6 @@
 
       document.getElementById('radarStrength').addEventListener('input', e => {
         radarStrength = parseInt(e.target.value, 10);
-        document.getElementById('radarStrengthValue').textContent = radarStrength + 'x';
         updateRadarVisibility(radarToggle.checked);
       });
     }
@@ -380,25 +438,6 @@
         if (courseBounds) map.fitBounds(courseBounds, { padding: 40 });
       });
     }
-
-    document.getElementById('toggleChart').addEventListener('click', () => {
-      const mapDiv = document.getElementById('map');
-      const chartDiv = document.getElementById('elevationContainer');
-      const btn = document.getElementById('toggleChart');
-
-      if (chartDiv.style.height === '0px' || chartDiv.style.height === '0%') {
-        chartDiv.style.height = '30%';
-        chartDiv.style.opacity = 1;
-        mapDiv.style.height = '70%';
-        btn.textContent = 'Elevation ▼';
-      } else {
-        chartDiv.style.height = '0%';
-        chartDiv.style.opacity = 0;
-        mapDiv.style.height = '100%';
-        btn.textContent = 'Elevation ▲';
-      }
-      setTimeout(() => map.resize(), 400);
-    });
   </script>
 </body>
 </html>
