@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Ute 100 Live Tracker & Pacing Dashboard</title>
 
   <!-- Mapbox -->
@@ -16,48 +16,63 @@
   <style>
     body, html { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; overflow: hidden; background: #f4f6f9; transition: background 0.3s, color 0.3s; }
     
-    #map { width: 100%; height: 50%; position: relative; transition: height 0.3s ease; }
-    #elevationContainer { width: 100%; height: 20%; background: white; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; transition: background 0.3s, border-color 0.3s; }
-    #elevationChart { width: 100%; height: 100%; max-height: 200px; }
-    #tableContainer { width: 100%; height: 30%; overflow-y: auto; background: #ffffff; padding: 10px; box-sizing: border-box; transition: background 0.3s; }
+    #map { width: 100%; height: 100%; position: relative; transition: height 0.3s ease; }
     
-    #infoPanel { position: absolute; top: 10px; left: 10px; background: rgba(255, 255, 255, 0.95); padding: 10px 14px; border-radius: 8px; font-size: 13px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); z-index: 999; transition: background 0.3s, color 0.3s; }
-    #infoPanel .title { font-weight: bold; font-size: 15px; margin-bottom: 6px; color: #1E3F66; transition: color 0.3s; }
+    #elevationContainer { width: 100%; height: 0%; background: white; transition: height 0.3s ease, border-color 0.3s; overflow: hidden; }
+    .chart-wrapper { padding: 10px; height: 100%; box-sizing: border-box; }
+    #elevationChart { width: 100%; height: 100%; max-height: 200px; }
+    
+    #tableContainer { width: 100%; height: 0%; overflow-y: auto; background: #ffffff; transition: height 0.3s ease; }
+    .table-wrapper { padding: 10px; }
+    
+    /* Main Stats Panel */
+    #infoPanel { position: absolute; top: 10px; left: 10px; background: rgba(255, 255, 255, 0.95); padding: 10px 14px; border-radius: 8px; font-size: 13px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); z-index: 999; transition: background 0.3s, color 0.3s; max-width: calc(100% - 40px); }
+    #infoPanel .title { font-weight: bold; font-size: 16px; margin-bottom: 6px; color: #1E3F66; transition: color 0.3s; }
     #lastUpdate, #averagePace, #estFinish, #climbInfo, #deltaTarget { font-size: 12px; margin-top: 3px; color: #333; transition: color 0.3s; }
     
-    #radarControls { position: absolute; bottom: 10px; right: 10px; background: rgba(255, 255, 255, 0.95); padding: 8px 12px; border-radius: 8px; font-size: 12px; z-index: 999; width: 190px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); transition: background 0.3s, color 0.3s; }
-    #radarControls button { margin-top: 4px; display: block; width: 100%; padding: 4px; border-radius: 4px; border: 1px solid #ccc; background: #f8f9fa; cursor: pointer; font-size: 11px; transition: background 0.3s, color 0.3s, border-color 0.3s; }
-    #radarControls button:hover { background: #e2e6ea; }
+    /* Floating Bottom Navigation Menu */
+    #bottomNav { position: absolute; bottom: 25px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 1000; width: 95%; max-width: 450px; justify-content: center; }
+    .nav-btn { flex: 1; background: rgba(30, 63, 102, 0.95); color: white; border: 2px solid rgba(255,255,255,0.3); padding: 10px 0; border-radius: 25px; font-size: 13px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.4); text-align: center; transition: background 0.2s, border-color 0.2s; white-space: nowrap; }
+    .nav-btn.active { background: #d32f2f; border-color: white; }
+
+    /* Pop-up Settings Modal */
+    #settingsMenu { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255, 255, 255, 0.98); padding: 20px; border-radius: 12px; z-index: 1001; display: none; width: 240px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); flex-direction: column; gap: 8px; border: 1px solid #ddd; }
+    .settings-title { font-weight: bold; font-size: 16px; margin-bottom: 10px; border-bottom: 2px solid #ccc; padding-bottom: 8px; color: #1E3F66; text-align: center; }
+    .settings-btn { padding: 10px; border-radius: 8px; border: 1px solid #ccc; background: #f8f9fa; cursor: pointer; font-size: 13px; font-weight: bold; width: 100%; text-align: center; transition: background 0.2s; }
+    .settings-btn:hover { background: #e2e6ea; }
+    .close-btn { background: #d32f2f; color: white; border: none; margin-top: 10px; }
+    .close-btn:hover { background: #b71c1c; }
 
     /* Aid Station Table Styling */
     table.pacingTable { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; transition: color 0.3s; }
-    table.pacingTable th { background-color: #1E3F66; color: white; padding: 8px; position: sticky; top: 0; z-index: 10; transition: background 0.3s, color 0.3s; }
-    table.pacingTable td { padding: 8px; border-bottom: 1px solid #e0e0e0; transition: border-color 0.3s; }
+    table.pacingTable th { background-color: #1E3F66; color: white; padding: 10px 8px; position: sticky; top: 0; z-index: 10; transition: background 0.3s, color 0.3s; }
+    table.pacingTable td { padding: 10px 8px; border-bottom: 1px solid #e0e0e0; transition: border-color 0.3s; }
     table.pacingTable tr:nth-child(even) { background-color: #f9fafb; transition: background 0.3s; }
-    
     .status-passed { color: #888; text-decoration: line-through; background-color: #f0f0f0 !important; }
     .status-next { color: #c62828; font-weight: bold; background-color: #ffebee !important; }
-    .badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; display: inline-block; }
+    .badge { padding: 3px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; display: inline-block; line-height: 1.2;}
     .badge-crew { background-color: #0288d1; }
     .badge-drop { background-color: #ed6c02; }
     .badge-gear { background-color: #7b1fa2; }
 
     /* --- DARK MODE UI STYLES --- */
     body.dark-mode { background: #121212; color: #eee; }
-    body.dark-mode #infoPanel, body.dark-mode #radarControls { background: rgba(30, 30, 30, 0.85); color: #eee; }
+    body.dark-mode #infoPanel { background: rgba(30, 30, 30, 0.9); color: #eee; border: 1px solid #444; }
     body.dark-mode #infoPanel .title { color: #82b1ff; }
     body.dark-mode #lastUpdate, body.dark-mode #averagePace, body.dark-mode #climbInfo { color: #ccc; }
     body.dark-mode #estFinish { color: #4caf50; }
     body.dark-mode #deltaTarget { color: #ff5252; }
-    body.dark-mode #elevationContainer { background: #1e1e1e; border-color: #333; }
+    body.dark-mode #settingsMenu { background: rgba(35, 35, 35, 0.98); border-color: #555; color: #eee; }
+    body.dark-mode .settings-title { color: #82b1ff; border-color: #555; }
+    body.dark-mode .settings-btn { background: #444; color: #eee; border-color: #666; }
+    body.dark-mode .settings-btn:hover { background: #555; }
+    body.dark-mode #elevationContainer { background: #1e1e1e; border-color: #444; }
     body.dark-mode #tableContainer { background: #1e1e1e; }
     body.dark-mode table.pacingTable th { background-color: #222; color: #82b1ff; }
     body.dark-mode table.pacingTable td { border-bottom: 1px solid #333; }
     body.dark-mode table.pacingTable tr:nth-child(even) { background-color: #2a2a2a; }
     body.dark-mode .status-passed { color: #666; background-color: #1a1a1a !important; }
     body.dark-mode .status-next { color: #ff8a80; background-color: #4a1c1c !important; }
-    body.dark-mode #radarControls button { background: #333; color: #eee; border-color: #555; }
-    body.dark-mode #radarControls button:hover { background: #444; }
   </style>
 </head>
 <body>
@@ -72,47 +87,63 @@
       <div id="deltaTarget" style="font-weight: bold; color: #B22222;">Vs 30-Hr Plan: --</div>
     </div>
 
-    <div id="radarControls">
-      <input type="checkbox" id="toggleRadar" checked> Weather Radar 🌧<br>
-      <label for="radarStrength" style="font-size:11px;">Radar Opacity:</label>
-      <input type="range" id="radarStrength" min="1" max="20" value="10">
-      <hr style="margin: 6px 0; border: 0; border-top: 1px solid #ccc;">
-      <button id="toggleNight">🌙 Night Mode</button>
-      <button id="toggleSat">🛰️ Satellite View</button>
-      <button id="refreshRadar">🔄 Refresh Radar</button>
-      <button id="zoomRunner">🏃 Zoom to Runner</button>
-      <button id="zoomCourse">🗺️ Zoom to Course</button>
+    <!-- Floating Navigation -->
+    <div id="bottomNav">
+      <button class="nav-btn" id="btnSettings">⚙️ Settings</button>
+      <button class="nav-btn" id="btnElevation">📊 Elevation</button>
+      <button class="nav-btn" id="btnPacing">📋 Pacing</button>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsMenu">
+      <div class="settings-title">Map Controls</div>
+      
+      <label style="font-size: 14px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+        <input type="checkbox" id="toggleRadar" style="width: 16px; height: 16px;"> Weather Radar 🌧
+      </label>
+      
+      <label for="radarStrength" style="font-size:12px; margin-top: 10px;">Radar Opacity:</label>
+      <input type="range" id="radarStrength" min="1" max="20" value="10" style="width: 100%; margin-bottom: 10px;">
+      
+      <button id="toggleNight" class="settings-btn">🌙 Night Mode</button>
+      <button id="toggleSat" class="settings-btn">🛰️ Satellite View</button>
+      <button id="refreshRadar" class="settings-btn">🔄 Refresh Radar</button>
+      <button id="zoomRunner" class="settings-btn">🏃 Zoom to Runner</button>
+      <button id="zoomCourse" class="settings-btn">🗺️ Zoom to Course</button>
+      <button id="closeSettings" class="settings-btn close-btn">Close</button>
     </div>
   </div>
 
   <div id="elevationContainer">
-    <canvas id="elevationChart"></canvas>
+    <div class="chart-wrapper">
+      <canvas id="elevationChart"></canvas>
+    </div>
   </div>
 
   <div id="tableContainer">
-    <table class="pacingTable">
-      <thead>
-        <tr>
-          <th>Aid Station</th>
-          <th>Mile</th>
-          <th>Plan ETA (30h)</th>
-          <th>Live Projected ETA</th>
-          <th>Leg Mi</th>
-          <th>Gain/Loss</th>
-          <th>Logistics & Gear Notes</th>
-        </tr>
-      </thead>
-      <tbody id="aidTableBody">
-        <!-- Dynamically Populated -->
-      </tbody>
-    </table>
+    <div class="table-wrapper">
+      <table class="pacingTable">
+        <thead>
+          <tr>
+            <th>Aid Station</th>
+            <th>Mile</th>
+            <th>Plan ETA (30h)</th>
+            <th>Live Projected ETA</th>
+            <th>Leg Mi</th>
+            <th>Gain/Loss</th>
+            <th>Logistics & Gear Notes</th>
+          </tr>
+        </thead>
+        <tbody id="aidTableBody">
+          <!-- Dynamically Populated -->
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <script>
     mapboxgl.accessToken = 'pk.eyJ1IjoiZmluczEyOSIsImEiOiJjbWRkYTAxcXIwMmdvMnJwc2xodjF4b3M5In0.58QcMA8Zo_BPNLORLz5Sug';
     const GARMIN_FEED = "https://share.garmin.com/Feed/Share/DanFindley";
-    
-    // Official Race Start Time
     const RACE_START_TIME = new Date('2026-08-08T05:00:00-06:00');
 
     const map = new mapboxgl.Map({
@@ -121,12 +152,13 @@
       center: [-109.25, 38.50],
       zoom: 10
     });
-    map.addControl(new mapboxgl.NavigationControl());
+    map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
-    // State toggles
+    // UI State Management
     let isNightMode = false;
     let isSatellite = false;
     let initialLoadComplete = false;
+    let activePanel = 'none'; // 'none', 'elevation', 'table'
 
     function createCustomMarker(emoji, color = 'black', withBg = false, fontSize = '20px', bgSize = '32px') {
       const el = document.createElement('div');
@@ -175,24 +207,20 @@
     let radarStrength = 10;
     const maxRadarLayers = 20;
 
-    // --- ONLY FIRES ON VERY FIRST LOAD ---
     map.on('load', async () => {
-      await initCourse(); // Loads course and bounds first
-      setupRadarControls();
-      setupZoomControls();
+      await initCourse(); 
+      setupUIControls();
       
-      preloadRadarLayers(); // Safe to load radar now
-      updateRadarVisibility(document.getElementById('toggleRadar').checked);
+      preloadRadarLayers(); // Safe to load radar now, but it's hidden by default
+      updateRadarVisibility(false);
       
       fetchGarminLocation();
       setInterval(fetchGarminLocation, 120000); 
-      initialLoadComplete = true; // Unlock style switching
+      initialLoadComplete = true; 
     });
 
-    // --- RESTORES COURSE AND RADAR AFTER A STYLE TOGGLE ---
     map.on('style.load', () => {
-      if (!initialLoadComplete) return; // Skip during initial boot
-
+      if (!initialLoadComplete) return; 
       if (window.courseDataGeoJson && !map.getSource('course')) {
         map.addSource('course', { type: 'geojson', data: window.courseDataGeoJson });
         map.addLayer({
@@ -202,7 +230,6 @@
           paint: { 'line-color': '#FF4500', 'line-width': 4, 'line-blur': 1 }
         });
       }
-      
       preloadRadarLayers();
       const radarToggle = document.getElementById('toggleRadar');
       if (radarToggle) updateRadarVisibility(radarToggle.checked);
@@ -262,7 +289,6 @@
       totalMiles = (totalDist / 1609.34).toFixed(1);
       courseBounds = bounds;
 
-      // UPDATE UI WITH PROPER COURSE TOTALS IMMEDIATELY
       document.getElementById('remain').textContent = totalMiles;
       document.getElementById('climbInfo').textContent = `Climbed: 0 ft | To Go: ${totalClimb} ft`;
       if (elevationData.length > 0) {
@@ -470,7 +496,7 @@
             type: 'raster',
             source: layerId,
             paint: { 'raster-opacity': 1.0 },
-            layout: { visibility: i < radarStrength ? 'visible' : 'none' }
+            layout: { visibility: i < radarStrength && document.getElementById('toggleRadar').checked ? 'visible' : 'none' }
           });
         }
       }
@@ -495,10 +521,57 @@
       }
     }
 
-    function setupRadarControls() {
-      const radarToggle = document.getElementById('toggleRadar');
-      radarToggle.checked = true;
-      radarToggle.addEventListener('change', e => updateRadarVisibility(e.target.checked));
+    function updatePanels() {
+      const mapEl = document.getElementById('map');
+      const elevEl = document.getElementById('elevationContainer');
+      const tableEl = document.getElementById('tableContainer');
+      const btnElev = document.getElementById('btnElevation');
+      const btnTable = document.getElementById('btnPacing');
+
+      btnElev.classList.remove('active');
+      btnTable.classList.remove('active');
+
+      if (activePanel === 'elevation') {
+        mapEl.style.height = '65%';
+        elevEl.style.height = '35%';
+        tableEl.style.height = '0%';
+        btnElev.classList.add('active');
+      } else if (activePanel === 'table') {
+        mapEl.style.height = '50%';
+        tableEl.style.height = '50%';
+        elevEl.style.height = '0%';
+        btnTable.classList.add('active');
+      } else {
+        mapEl.style.height = '100%';
+        elevEl.style.height = '0%';
+        tableEl.style.height = '0%';
+      }
+      setTimeout(() => map.resize(), 300);
+    }
+
+    function setupUIControls() {
+      // Panel Toggles
+      document.getElementById('btnElevation').addEventListener('click', () => {
+        activePanel = activePanel === 'elevation' ? 'none' : 'elevation';
+        updatePanels();
+      });
+
+      document.getElementById('btnPacing').addEventListener('click', () => {
+        activePanel = activePanel === 'table' ? 'none' : 'table';
+        updatePanels();
+      });
+
+      // Settings Modal Toggles
+      document.getElementById('btnSettings').addEventListener('click', () => {
+        document.getElementById('settingsMenu').style.display = 'flex';
+      });
+      document.getElementById('closeSettings').addEventListener('click', () => {
+        document.getElementById('settingsMenu').style.display = 'none';
+      });
+
+      // Radar Controls
+      document.getElementById('toggleRadar').checked = false; // Default OFF
+      document.getElementById('toggleRadar').addEventListener('change', e => updateRadarVisibility(e.target.checked));
 
       document.getElementById('refreshRadar').addEventListener('click', () => {
         for (let i = 0; i < maxRadarLayers; i++) {
@@ -508,15 +581,15 @@
           }
         }
         preloadRadarLayers();
-        if (!radarToggle.checked) updateRadarVisibility(false);
+        if (!document.getElementById('toggleRadar').checked) updateRadarVisibility(false);
       });
 
       document.getElementById('radarStrength').addEventListener('input', e => {
         radarStrength = parseInt(e.target.value, 10);
-        updateRadarVisibility(radarToggle.checked);
+        updateRadarVisibility(document.getElementById('toggleRadar').checked);
       });
 
-      // Night Mode Toggle
+      // Map Style Toggles
       document.getElementById('toggleNight').addEventListener('click', () => {
         isNightMode = !isNightMode;
         document.body.classList.toggle('dark-mode', isNightMode);
@@ -530,7 +603,6 @@
         }
       });
 
-      // Satellite Toggle
       document.getElementById('toggleSat').addEventListener('click', () => {
         isSatellite = !isSatellite;
         document.getElementById('toggleSat').innerHTML = isSatellite ? '🗺️ Map View' : '🛰️ Satellite View';
@@ -542,9 +614,11 @@
       document.getElementById('zoomRunner').addEventListener('click', () => {
         const runnerPos = liveMarker.getLngLat();
         map.flyTo({ center: runnerPos, zoom: 14 });
+        document.getElementById('settingsMenu').style.display = 'none'; // Auto-close menu
       });
       document.getElementById('zoomCourse').addEventListener('click', () => {
         if (courseBounds) map.fitBounds(courseBounds, { padding: 40 });
+        document.getElementById('settingsMenu').style.display = 'none'; // Auto-close menu
       });
     }
   </script>
