@@ -12,7 +12,6 @@
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="config.js"></script> <!-- API key -->
-  <script src="data.js"></script> <!-- Local Track Data -->
 
   <style>
     body, html { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; overflow: hidden; background: #f4f6f9; }
@@ -90,8 +89,8 @@
     mapboxgl.accessToken = 'pk.eyJ1IjoiZmluczEyOSIsImEiOiJjbWRkYTAxcXIwMmdvMnJwc2xodjF4b3M5In0.58QcMA8Zo_BPNLORLz5Sug';
     const GARMIN_FEED = "https://share.garmin.com/Feed/Share/DanFindley";
     
-    // Official Race Start Time: Adjust this exact string if the race start changes
-    const RACE_START_TIME = new Date('2026-08-08T05:00:00-06:00'); // Aug 8, 5:00 AM MDT
+    // Official Race Start Time
+    const RACE_START_TIME = new Date('2026-08-08T05:00:00-06:00');
 
     const map = new mapboxgl.Map({
       container: 'map',
@@ -120,7 +119,6 @@
       return el;
     }
 
-    // Ute 100 Aid Station Data matched to 30-Hour Plan
     const aidStations = [
       { name: "Start", targetMile: 0.0, legMi: 0, gain: "+0", loss: "-0", planEta: "Aug 8, 5:00 AM", coords: null, notes: "Start w/ Headlamp & Gloves" },
       { name: "Upper Porcupine 1", targetMile: 6.5, legMi: 6.5, gain: "+516", loss: "-1094", planEta: "Aug 8, 6:16 AM", coords: null, notes: "<span class='badge badge-crew'>Crew</span> Drop Headlamp & Gloves" },
@@ -177,8 +175,9 @@
       }
     }
 
-    function initCourse() {
-      const data = courseData; // Pulls strictly from the local data.js file
+    async function initCourse() {
+      // FIXED: Now correctly fetches course.geojson from your GitHub repo
+      const data = await fetch('course.geojson').then(res => res.json());
       const coords = data.features[0].geometry.coordinates;
       let totalDist = 0;
       let climb = 0;
@@ -279,7 +278,6 @@
           statusClass = 'status-next';
         }
 
-        // Live projected ETA calculation mathematically derived from Race Start + (Target Mile * True Overall Pace)
         let liveEtaStr = "--";
         if (st.targetMile === 0) {
           liveEtaStr = st.planEta;
@@ -296,7 +294,7 @@
           
           liveEtaStr = `Aug ${day}, ${hrs}:${mins} ${ampm}`;
         } else {
-          liveEtaStr = st.planEta; // Pre-race display
+          liveEtaStr = st.planEta; 
         }
 
         row.className = statusClass;
@@ -340,9 +338,8 @@
       document.getElementById('remain').textContent = remainMiles;
       document.getElementById('climbInfo').textContent = `Climbed: ${climbedFt} ft | To Go: ${climbRemaining} ft`;
 
-      // Overall Pace Calculation (Completely eliminates ping-to-ping volatile GPS drift)
       const elapsedMinutes = (timestamp - RACE_START_TIME) / 60000;
-      let avgPace = 18.15; // 30-hour baseline pace
+      let avgPace = 18.15; 
 
       if (elapsedMinutes > 0 && currentMile > 0.1) {
         avgPace = elapsedMinutes / currentMile;
@@ -358,7 +355,6 @@
         let mins = finishTime.getMinutes().toString().padStart(2, '0');
         document.getElementById('estFinish').textContent = `Est Finish: ${hrs}:${mins} ${ampm}`;
         
-        // Pacing Delta compared to 30-Hour Goal
         const targetMinsAtDist = currentMile * 18.15;
         const deltaMins = Math.round(elapsedMinutes - targetMinsAtDist);
         const deltaStr = deltaMins <= 0 ? `${Math.abs(deltaMins)} mins AHEAD` : `${deltaMins} mins BEHIND`;
