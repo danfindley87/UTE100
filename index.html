@@ -11,7 +11,7 @@
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="config.js"></script> <!-- API key -->
+  <script src="config.js"></script>
 
   <style>
     body, html { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; overflow: hidden; background: #f4f6f9; }
@@ -100,38 +100,38 @@
     });
     map.addControl(new mapboxgl.NavigationControl());
 
-    function createCustomMarker(emoji, color = 'black', withBg = false) {
+    function createCustomMarker(emoji, color = 'black', withBg = false, fontSize = '20px', bgSize = '32px') {
       const el = document.createElement('div');
-      el.style.fontSize = '20px';
+      el.style.fontSize = fontSize;
       el.style.color = color;
       el.style.textAlign = 'center';
       el.textContent = emoji;
       if (withBg) {
         el.style.background = 'white';
         el.style.borderRadius = '50%';
-        el.style.width = '28px';
-        el.style.height = '28px';
+        el.style.width = bgSize;
+        el.style.height = bgSize;
         el.style.display = 'flex';
         el.style.justifyContent = 'center';
         el.style.alignItems = 'center';
-        el.style.boxShadow = '0 0 4px rgba(0,0,0,0.4)';
+        el.style.boxShadow = '0 0 5px rgba(0,0,0,0.5)';
       }
       return el;
     }
 
     const aidStations = [
       { name: "Start", targetMile: 0.0, legMi: 0, gain: "+0", loss: "-0", planEta: "Aug 8, 5:00 AM", coords: null, notes: "Start w/ Headlamp & Gloves" },
-      { name: "Upper Porcupine 1", targetMile: 6.5, legMi: 6.5, gain: "+516", loss: "-1094", planEta: "Aug 8, 6:16 AM", coords: null, notes: "<span class='badge badge-crew'>Crew</span> Drop Headlamp & Gloves" },
-      { name: "Upper Porcupine 2", targetMile: 15.4, legMi: 8.9, gain: "+1500", loss: "-1556", planEta: "Aug 8, 8:10 AM", coords: null, notes: "<span class='badge badge-crew'>Crew</span> Warming Up - Hydrate" },
-      { name: "Hazardous 1", targetMile: 23.2, legMi: 7.8, gain: "+2294", loss: "-241", planEta: "Aug 8, 10:44 AM", coords: null, notes: "<span class='badge badge-drop'>Drop Bag</span> Peak Heat Climb" },
-      { name: "Geyser 1", targetMile: 32.0, legMi: 8.8, gain: "+3293", loss: "-2109", planEta: "Aug 8, 1:58 PM", coords: null, notes: "<span class='badge badge-drop'>Drop Bag</span> Afternoon Push" },
-      { name: "Dark Canyon", targetMile: 42.2, legMi: 10.2, gain: "+506", loss: "-1824", planEta: "Aug 8, 4:01 PM", coords: null, notes: "<span class='badge badge-crew'>Crew</span> Cruising Descent" },
-      { name: "Winter Creek", targetMile: 47.7, legMi: 5.5, gain: "+36", loss: "-1510", planEta: "Aug 8, 5:06 PM", coords: null, notes: "<span class='badge badge-crew'>Crew</span> Grab Headlamp just in case" },
-      { name: "South Mountain 1", targetMile: 56.8, legMi: 9.1, gain: "+2515", loss: "-54", planEta: "Aug 8, 7:54 PM", coords: null, notes: "<span class='badge badge-crew'>Crew</span> <span class='badge badge-drop'>Drop Bag</span> <span class='badge badge-gear'>Jacket/Gloves</span>" },
-      { name: "South Mountain 2", targetMile: 67.7, legMi: 10.9, gain: "+2787", loss: "-2980", planEta: "Aug 8, 11:48 PM", coords: null, notes: "<span class='badge badge-crew'>Crew</span> <span class='badge badge-drop'>Drop Bag</span> Night Loop Complete" },
-      { name: "Squaw Springs", targetMile: 75.4, legMi: 7.7, gain: "+928", loss: "-1964", planEta: "Aug 9, 2:33 AM", coords: null, notes: "<span class='badge badge-crew'>Crew</span> Pre-Dawn Cold" },
-      { name: "Geyser 2", targetMile: 81.0, legMi: 5.6, gain: "+1648", loss: "-179", planEta: "Aug 9, 4:42 AM", coords: null, notes: "<span class='badge badge-drop'>Drop Bag</span> Sun Opening Up" },
-      { name: "Hazardous 2", targetMile: 88.0, legMi: 7.0, gain: "+848", loss: "-1966", planEta: "Aug 9, 7:00 AM", coords: null, notes: "<span class='badge badge-drop'>Drop Bag</span> Drop Headlamp & Heavy Layers" },
+      { name: "Upper Porcupine 1", targetMile: 6.5, legMi: 6.5, gain: "+516", loss: "-1094", planEta: "Aug 8, 6:16 AM", coords: [-109.3586286099904, 38.578562602650415], notes: "<span class='badge badge-crew'>Crew</span> Drop Headlamp & Gloves" },
+      { name: "Upper Porcupine 2", targetMile: 15.4, legMi: 8.9, gain: "+1500", loss: "-1556", planEta: "Aug 8, 8:10 AM", coords: [-109.3586286099904, 38.578562602650415], notes: "<span class='badge badge-crew'>Crew</span> Warming Up - Hydrate" },
+      { name: "Hazardous 1", targetMile: 23.2, legMi: 7.8, gain: "+2294", loss: "-241", planEta: "Aug 8, 10:44 AM", coords: [-109.2815, 38.5255], notes: "<span class='badge badge-drop'>Drop Bag</span> Peak Heat Climb" },
+      { name: "Geyser 1", targetMile: 32.0, legMi: 8.8, gain: "+3293", loss: "-2109", planEta: "Aug 8, 1:58 PM", coords: [-109.22586, 38.47884], notes: "<span class='badge badge-drop'>Drop Bag</span> Afternoon Push" },
+      { name: "Dark Canyon", targetMile: 42.2, legMi: 10.2, gain: "+506", loss: "-1824", planEta: "Aug 8, 4:01 PM", coords: [-109.17981, 38.41583], notes: "<span class='badge badge-crew'>Crew</span> Cruising Descent" },
+      { name: "Winter Creek", targetMile: 47.7, legMi: 5.5, gain: "+36", loss: "-1510", planEta: "Aug 8, 5:06 PM", coords: [-109.18627, 38.36465], notes: "<span class='badge badge-crew'>Crew</span> Grab Headlamp just in case" },
+      { name: "South Mountain 1", targetMile: 56.8, legMi: 9.1, gain: "+2515", loss: "-54", planEta: "Aug 8, 7:54 PM", coords: [-109.251646, 38.418903], notes: "<span class='badge badge-crew'>Crew</span> <span class='badge badge-drop'>Drop Bag</span> <span class='badge badge-gear'>Jacket/Gloves</span>" },
+      { name: "South Mountain 2", targetMile: 67.7, legMi: 10.9, gain: "+2787", loss: "-2980", planEta: "Aug 8, 11:48 PM", coords: [-109.251646, 38.418903], notes: "<span class='badge badge-crew'>Crew</span> <span class='badge badge-drop'>Drop Bag</span> Night Loop Complete" },
+      { name: "Squaw Springs", targetMile: 75.4, legMi: 7.7, gain: "+928", loss: "-1964", planEta: "Aug 9, 2:33 AM", coords: [-109.2898, 38.47916], notes: "<span class='badge badge-crew'>Crew</span> Pre-Dawn Cold" },
+      { name: "Geyser 2", targetMile: 81.0, legMi: 5.6, gain: "+1648", loss: "-179", planEta: "Aug 9, 4:42 AM", coords: [-109.22586, 38.47884], notes: "<span class='badge badge-drop'>Drop Bag</span> Sun Opening Up" },
+      { name: "Hazardous 2", targetMile: 88.0, legMi: 7.0, gain: "+848", loss: "-1966", planEta: "Aug 9, 7:00 AM", coords: [-109.2815, 38.5255], notes: "<span class='badge badge-drop'>Drop Bag</span> Drop Headlamp & Heavy Layers" },
       { name: "Finish", targetMile: 99.2, legMi: 11.2, gain: "+2897", loss: "-4339", planEta: "Aug 9, 11:00 AM", coords: null, notes: "Final 11.2 Mi Push to Buckle!" }
     ];
 
@@ -141,7 +141,9 @@
     let coursePoints = [];
     let totalMiles = 0;
     let totalClimb = 0;
-    const liveMarker = new mapboxgl.Marker({ element: createCustomMarker('🏃‍♂️', 'black', true) });
+    
+    // Increased Runner Icon Size
+    const liveMarker = new mapboxgl.Marker({ element: createCustomMarker('🏃‍♂️', 'black', true, '24px', '38px') });
     let courseBounds;
     let lastUpdateData = { mile: 0, time: null };
     let radarStrength = 10;
@@ -176,7 +178,6 @@
     }
 
     async function initCourse() {
-      // FIXED: Now correctly fetches course.geojson from your GitHub repo
       const data = await fetch('course.geojson').then(res => res.json());
       const coords = data.features[0].geometry.coordinates;
       let totalDist = 0;
@@ -217,23 +218,25 @@
         paint: { 'line-color': '#FF4500', 'line-width': 4, 'line-blur': 1 }
       });
 
+      // Increased Aid Station Icon Size w/ Background
       aidStations.forEach(station => {
-        if(station.coords) {
-            new mapboxgl.Marker({ element: createCustomMarker('✚', 'red') })
+        if(station.coords && station.name !== "Start" && station.name !== "Finish") {
+            new mapboxgl.Marker({ element: createCustomMarker('✚', '#d32f2f', true, '18px', '30px') })
             .setLngLat(station.coords)
-            .setPopup(new mapboxgl.Popup().setText(station.name))
+            .setPopup(new mapboxgl.Popup({ offset: 15 }).setText(station.name))
             .addTo(map);
         }
       });
 
-      new mapboxgl.Marker({ element: createCustomMarker('🏳️', 'green') })
+      // Increased Start/Finish Flags
+      new mapboxgl.Marker({ element: createCustomMarker('🏳️', 'green', true, '18px', '30px') })
         .setLngLat(coursePoints[0])
-        .setPopup(new mapboxgl.Popup().setText("Start"))
+        .setPopup(new mapboxgl.Popup({ offset: 15 }).setText("Start"))
         .addTo(map);
 
-      new mapboxgl.Marker({ element: createCustomMarker('🏁', 'black') })
+      new mapboxgl.Marker({ element: createCustomMarker('🏁', 'black', true, '18px', '30px') })
         .setLngLat(coursePoints[coursePoints.length - 1])
-        .setPopup(new mapboxgl.Popup().setText("Finish"))
+        .setPopup(new mapboxgl.Popup({ offset: 15 }).setText("Finish"))
         .addTo(map);
 
       map.fitBounds(courseBounds, { padding: 40 });
