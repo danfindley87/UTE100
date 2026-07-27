@@ -11,33 +11,53 @@
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="config.js"></script>
+  <script src="config.js"></script> <!-- API key -->
 
   <style>
-    body, html { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; overflow: hidden; background: #f4f6f9; }
+    body, html { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; overflow: hidden; background: #f4f6f9; transition: background 0.3s, color 0.3s; }
+    
     #map { width: 100%; height: 50%; position: relative; transition: height 0.3s ease; }
-    #elevationContainer { width: 100%; height: 20%; background: white; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; }
+    #elevationContainer { width: 100%; height: 20%; background: white; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; transition: background 0.3s, border-color 0.3s; }
     #elevationChart { width: 100%; height: 100%; max-height: 200px; }
-    #tableContainer { width: 100%; height: 30%; overflow-y: auto; background: #ffffff; padding: 10px; box-sizing: border-box; }
+    #tableContainer { width: 100%; height: 30%; overflow-y: auto; background: #ffffff; padding: 10px; box-sizing: border-box; transition: background 0.3s; }
     
-    #infoPanel { position: absolute; top: 10px; left: 10px; background: rgba(255, 255, 255, 0.95); padding: 10px 14px; border-radius: 8px; font-size: 13px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); z-index: 999; }
-    #infoPanel .title { font-weight: bold; font-size: 15px; margin-bottom: 6px; color: #1E3F66; }
-    #lastUpdate, #averagePace, #estFinish, #climbInfo, #deltaTarget { font-size: 12px; margin-top: 3px; color: #333; }
+    #infoPanel { position: absolute; top: 10px; left: 10px; background: rgba(255, 255, 255, 0.95); padding: 10px 14px; border-radius: 8px; font-size: 13px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); z-index: 999; transition: background 0.3s, color 0.3s; }
+    #infoPanel .title { font-weight: bold; font-size: 15px; margin-bottom: 6px; color: #1E3F66; transition: color 0.3s; }
+    #lastUpdate, #averagePace, #estFinish, #climbInfo, #deltaTarget { font-size: 12px; margin-top: 3px; color: #333; transition: color 0.3s; }
     
-    #radarControls { position: absolute; bottom: 10px; right: 10px; background: rgba(255, 255, 255, 0.95); padding: 8px 12px; border-radius: 8px; font-size: 12px; z-index: 999; width: 190px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
-    #radarControls button { margin-top: 4px; display: block; width: 100%; padding: 4px; border-radius: 4px; border: 1px solid #ccc; background: #f8f9fa; cursor: pointer; font-size: 11px; }
+    #radarControls { position: absolute; bottom: 10px; right: 10px; background: rgba(255, 255, 255, 0.95); padding: 8px 12px; border-radius: 8px; font-size: 12px; z-index: 999; width: 190px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); transition: background 0.3s, color 0.3s; }
+    #radarControls button { margin-top: 4px; display: block; width: 100%; padding: 4px; border-radius: 4px; border: 1px solid #ccc; background: #f8f9fa; cursor: pointer; font-size: 11px; transition: background 0.3s, color 0.3s, border-color 0.3s; }
+    #radarControls button:hover { background: #e2e6ea; }
 
     /* Aid Station Table Styling */
-    table.pacingTable { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
-    table.pacingTable th { background-color: #1E3F66; color: white; padding: 8px; position: sticky; top: 0; z-index: 10; }
-    table.pacingTable td { padding: 8px; border-bottom: 1px solid #e0e0e0; }
-    table.pacingTable tr:nth-child(even) { background-color: #f9fafb; }
+    table.pacingTable { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; transition: color 0.3s; }
+    table.pacingTable th { background-color: #1E3F66; color: white; padding: 8px; position: sticky; top: 0; z-index: 10; transition: background 0.3s, color 0.3s; }
+    table.pacingTable td { padding: 8px; border-bottom: 1px solid #e0e0e0; transition: border-color 0.3s; }
+    table.pacingTable tr:nth-child(even) { background-color: #f9fafb; transition: background 0.3s; }
+    
     .status-passed { color: #888; text-decoration: line-through; background-color: #f0f0f0 !important; }
     .status-next { color: #c62828; font-weight: bold; background-color: #ffebee !important; }
     .badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; display: inline-block; }
     .badge-crew { background-color: #0288d1; }
     .badge-drop { background-color: #ed6c02; }
     .badge-gear { background-color: #7b1fa2; }
+
+    /* --- DARK MODE UI STYLES --- */
+    body.dark-mode { background: #121212; color: #eee; }
+    body.dark-mode #infoPanel, body.dark-mode #radarControls { background: rgba(30, 30, 30, 0.85); color: #eee; }
+    body.dark-mode #infoPanel .title { color: #82b1ff; }
+    body.dark-mode #lastUpdate, body.dark-mode #averagePace, body.dark-mode #climbInfo { color: #ccc; }
+    body.dark-mode #estFinish { color: #4caf50; }
+    body.dark-mode #deltaTarget { color: #ff5252; }
+    body.dark-mode #elevationContainer { background: #1e1e1e; border-color: #333; }
+    body.dark-mode #tableContainer { background: #1e1e1e; }
+    body.dark-mode table.pacingTable th { background-color: #222; color: #82b1ff; }
+    body.dark-mode table.pacingTable td { border-bottom: 1px solid #333; }
+    body.dark-mode table.pacingTable tr:nth-child(even) { background-color: #2a2a2a; }
+    body.dark-mode .status-passed { color: #666; background-color: #1a1a1a !important; }
+    body.dark-mode .status-next { color: #ff8a80; background-color: #4a1c1c !important; }
+    body.dark-mode #radarControls button { background: #333; color: #eee; border-color: #555; }
+    body.dark-mode #radarControls button:hover { background: #444; }
   </style>
 </head>
 <body>
@@ -56,6 +76,9 @@
       <input type="checkbox" id="toggleRadar" checked> Weather Radar 🌧<br>
       <label for="radarStrength" style="font-size:11px;">Radar Opacity:</label>
       <input type="range" id="radarStrength" min="1" max="20" value="10">
+      <hr style="margin: 6px 0; border: 0; border-top: 1px solid #ccc;">
+      <button id="toggleNight">🌙 Night Mode</button>
+      <button id="toggleSat">🛰️ Satellite View</button>
       <button id="refreshRadar">🔄 Refresh Radar</button>
       <button id="zoomRunner">🏃 Zoom to Runner</button>
       <button id="zoomCourse">🗺️ Zoom to Course</button>
@@ -89,7 +112,6 @@
     mapboxgl.accessToken = 'pk.eyJ1IjoiZmluczEyOSIsImEiOiJjbWRkYTAxcXIwMmdvMnJwc2xodjF4b3M5In0.58QcMA8Zo_BPNLORLz5Sug';
     const GARMIN_FEED = "https://share.garmin.com/Feed/Share/DanFindley";
     
-    // Official Race Start Time
     const RACE_START_TIME = new Date('2026-08-08T05:00:00-06:00');
 
     const map = new mapboxgl.Map({
@@ -99,6 +121,10 @@
       zoom: 10
     });
     map.addControl(new mapboxgl.NavigationControl());
+
+    // State toggles
+    let isNightMode = false;
+    let isSatellite = false;
 
     function createCustomMarker(emoji, color = 'black', withBg = false, fontSize = '20px', bgSize = '32px') {
       const el = document.createElement('div');
@@ -141,8 +167,6 @@
     let coursePoints = [];
     let totalMiles = 0;
     let totalClimb = 0;
-    
-    // Increased Runner Icon Size
     const liveMarker = new mapboxgl.Marker({ element: createCustomMarker('🏃‍♂️', 'black', true, '24px', '38px') });
     let courseBounds;
     let lastUpdateData = { mile: 0, time: null };
@@ -151,11 +175,17 @@
 
     map.on('load', () => {
       initCourse();
-      preloadRadarLayers();
       setupRadarControls();
       setupZoomControls();
       fetchGarminLocation();
       setInterval(fetchGarminLocation, 120000); 
+    });
+
+    // Handle Map Style Changes (Satellite / Dark Mode)
+    map.on('style.load', () => {
+      addCourseToMap();
+      preloadRadarLayers();
+      updateRadarVisibility(document.getElementById('toggleRadar').checked);
     });
 
     async function fetchGarminLocation() {
@@ -179,6 +209,8 @@
 
     async function initCourse() {
       const data = await fetch('course.geojson').then(res => res.json());
+      window.courseDataGeoJson = data; // Save for style switching
+
       const coords = data.features[0].geometry.coordinates;
       let totalDist = 0;
       let climb = 0;
@@ -210,15 +242,17 @@
       totalMiles = (totalDist / 1609.34).toFixed(1);
       courseBounds = bounds;
 
-      map.addSource('course', { type: 'geojson', data: data });
-      map.addLayer({
-        id: 'course-line',
-        type: 'line',
-        source: 'course',
-        paint: { 'line-color': '#FF4500', 'line-width': 4, 'line-blur': 1 }
-      });
+      // SET INITIAL DEFAULT UI BEFORE GARMIN PINGS 
+      document.getElementById('remain').textContent = totalMiles;
+      document.getElementById('climbInfo').textContent = `Climbed: 0 ft | To Go: ${totalClimb} ft`;
+      if (elevationData.length > 0) {
+          document.getElementById('elev').textContent = elevationData[0].toFixed(0);
+      }
 
-      // Increased Aid Station Icon Size w/ Background
+      if (map.isStyleLoaded()) {
+          addCourseToMap();
+      }
+
       aidStations.forEach(station => {
         if(station.coords && station.name !== "Start" && station.name !== "Finish") {
             new mapboxgl.Marker({ element: createCustomMarker('✚', '#d32f2f', true, '18px', '30px') })
@@ -228,7 +262,6 @@
         }
       });
 
-      // Increased Start/Finish Flags
       new mapboxgl.Marker({ element: createCustomMarker('🏳️', 'green', true, '18px', '30px') })
         .setLngLat(coursePoints[0])
         .setPopup(new mapboxgl.Popup({ offset: 15 }).setText("Start"))
@@ -265,6 +298,19 @@
           plugins: { legend: { display: false } }
         }
       });
+    }
+
+    function addCourseToMap() {
+      if (!window.courseDataGeoJson || !map.isStyleLoaded()) return;
+      if (!map.getSource('course')) {
+        map.addSource('course', { type: 'geojson', data: window.courseDataGeoJson });
+        map.addLayer({
+          id: 'course-line',
+          type: 'line',
+          source: 'course',
+          paint: { 'line-color': '#FF4500', 'line-width': 4, 'line-blur': 1 }
+        });
+      }
     }
 
     function buildPacingTable(currentMile, avgPace, isRaceActive) {
@@ -397,20 +443,23 @@
     }
 
     function preloadRadarLayers() {
+      if (!map.isStyleLoaded()) return;
       for (let i = 0; i < maxRadarLayers; i++) {
         const layerId = `radar-layer-${i}`;
-        map.addSource(layerId, {
-          type: 'raster',
-          tiles: [`https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${OWM_API_KEY}`],
-          tileSize: 256
-        });
-        map.addLayer({
-          id: layerId,
-          type: 'raster',
-          source: layerId,
-          paint: { 'raster-opacity': 1.0 },
-          layout: { visibility: i < radarStrength ? 'visible' : 'none' }
-        });
+        if (!map.getSource(layerId)) {
+          map.addSource(layerId, {
+            type: 'raster',
+            tiles: [`https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${OWM_API_KEY}`],
+            tileSize: 256
+          });
+          map.addLayer({
+            id: layerId,
+            type: 'raster',
+            source: layerId,
+            paint: { 'raster-opacity': 1.0 },
+            layout: { visibility: i < radarStrength ? 'visible' : 'none' }
+          });
+        }
       }
     }
 
@@ -420,6 +469,16 @@
         if (map.getLayer(`radar-layer-${i}`)) {
           map.setLayoutProperty(`radar-layer-${i}`, 'visibility', visibility);
         }
+      }
+    }
+
+    function applyMapStyle() {
+      if (isSatellite) {
+        map.setStyle('mapbox://styles/mapbox/satellite-streets-v12');
+      } else if (isNightMode) {
+        map.setStyle('mapbox://styles/mapbox/dark-v11');
+      } else {
+        map.setStyle('mapbox://styles/mapbox/outdoors-v12');
       }
     }
 
@@ -442,6 +501,28 @@
       document.getElementById('radarStrength').addEventListener('input', e => {
         radarStrength = parseInt(e.target.value, 10);
         updateRadarVisibility(radarToggle.checked);
+      });
+
+      // Night Mode Toggle
+      document.getElementById('toggleNight').addEventListener('click', () => {
+        isNightMode = !isNightMode;
+        document.body.classList.toggle('dark-mode', isNightMode);
+        document.getElementById('toggleNight').innerHTML = isNightMode ? '☀️ Day Mode' : '🌙 Night Mode';
+        applyMapStyle();
+        
+        // Update chart text colors
+        if (elevationChart) {
+          elevationChart.options.scales.x.ticks.color = isNightMode ? '#ccc' : '#666';
+          elevationChart.options.scales.y.ticks.color = isNightMode ? '#ccc' : '#666';
+          elevationChart.update();
+        }
+      });
+
+      // Satellite Toggle
+      document.getElementById('toggleSat').addEventListener('click', () => {
+        isSatellite = !isSatellite;
+        document.getElementById('toggleSat').innerHTML = isSatellite ? '🗺️ Map View' : '🛰️ Satellite View';
+        applyMapStyle();
       });
     }
 
