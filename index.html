@@ -46,7 +46,7 @@
     /* Aid Station Table Styling */
     table.pacingTable { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; transition: color 0.3s; }
     table.pacingTable th { background-color: #1E3F66; color: white; padding: 10px 8px; position: sticky; top: 0; z-index: 10; transition: background 0.3s, color 0.3s; }
-    table.pacingTable td { padding: 10px 8px; border-bottom: 1px solid #e0e0e0; transition: border-color 0.3s; }
+    table.pacingTable td { padding: 10px 8px; border-bottom: 1px solid #e0e0e0; transition: border-color 0.3s; vertical-align: top; }
     table.pacingTable tr:nth-child(even) { background-color: #f9fafb; transition: background 0.3s; }
     .status-passed { color: #888; text-decoration: line-through; background-color: #f0f0f0 !important; }
     .status-next { color: #c62828; font-weight: bold; background-color: #ffebee !important; }
@@ -54,6 +54,10 @@
     .badge-crew { background-color: #0288d1; }
     .badge-drop { background-color: #ed6c02; }
     .badge-gear { background-color: #7b1fa2; }
+
+    /* Navigation Button inside Table */
+    .nav-link-btn { display: inline-block; margin-top: 6px; padding: 4px 10px; background-color: #e3f2fd; color: #0288d1; text-decoration: none; border-radius: 12px; font-size: 11px; font-weight: bold; border: 1px solid #0288d1; transition: all 0.2s; }
+    .nav-link-btn:hover { background-color: #0288d1; color: white; }
 
     /* --- DARK MODE UI STYLES --- */
     body.dark-mode { background: #121212; color: #eee; }
@@ -73,6 +77,8 @@
     body.dark-mode table.pacingTable tr:nth-child(even) { background-color: #2a2a2a; }
     body.dark-mode .status-passed { color: #666; background-color: #1a1a1a !important; }
     body.dark-mode .status-next { color: #ff8a80; background-color: #4a1c1c !important; }
+    body.dark-mode .nav-link-btn { background-color: #01579b; color: #e1f5fe; border-color: #0288d1; }
+    body.dark-mode .nav-link-btn:hover { background-color: #0288d1; color: white; }
   </style>
 </head>
 <body>
@@ -180,20 +186,32 @@
       return el;
     }
 
+    // Interactive Hover Marker for Elevation Chart Sync
+    const hoverEl = document.createElement('div');
+    hoverEl.style.width = '14px';
+    hoverEl.style.height = '14px';
+    hoverEl.style.backgroundColor = '#0288d1';
+    hoverEl.style.border = '2px solid white';
+    hoverEl.style.borderRadius = '50%';
+    hoverEl.style.boxShadow = '0 0 4px rgba(0,0,0,0.5)';
+    hoverEl.style.pointerEvents = 'none'; 
+    const hoverMarker = new mapboxgl.Marker({ element: hoverEl });
+
+    // Aid Station Data with Hardcoded GPS Coords for the Navigate Buttons
     const aidStations = [
       { name: "Start", targetMile: 0.0, legMi: 0, gain: "+0", loss: "-0", planEta: "Aug 8, 5:00 AM", coords: null, notes: "Start w/ Headlamp & Gloves" },
-      { name: "Upper Porcupine 1", targetMile: 6.5, legMi: 6.5, gain: "+516", loss: "-1094", planEta: "Aug 8, 6:16 AM", notes: "<span class='badge badge-crew'>Crew</span> Drop Headlamp & Gloves" },
-      { name: "Upper Porcupine 2", targetMile: 15.4, legMi: 8.9, gain: "+1500", loss: "-1556", planEta: "Aug 8, 8:10 AM", notes: "<span class='badge badge-crew'>Crew</span> Warming Up - Hydrate" },
-      { name: "Hazardous 1", targetMile: 23.2, legMi: 7.8, gain: "+2294", loss: "-241", planEta: "Aug 8, 10:44 AM", notes: "<span class='badge badge-drop'>Drop Bag</span> Peak Heat Climb" },
-      { name: "Geyser 1", targetMile: 32.0, legMi: 8.8, gain: "+3293", loss: "-2109", planEta: "Aug 8, 1:58 PM", notes: "<span class='badge badge-drop'>Drop Bag</span> Afternoon Push" },
-      { name: "Dark Canyon", targetMile: 42.2, legMi: 10.2, gain: "+506", loss: "-1824", planEta: "Aug 8, 4:01 PM", notes: "<span class='badge badge-crew'>Crew</span> Cruising Descent" },
-      { name: "Winter Creek", targetMile: 47.7, legMi: 5.5, gain: "+36", loss: "-1510", planEta: "Aug 8, 5:06 PM", notes: "<span class='badge badge-crew'>Crew</span> Grab Headlamp just in case" },
-      { name: "South Mountain 1", targetMile: 56.8, legMi: 9.1, gain: "+2515", loss: "-54", planEta: "Aug 8, 7:54 PM", notes: "<span class='badge badge-crew'>Crew</span> <span class='badge badge-drop'>Drop Bag</span> <span class='badge badge-gear'>Jacket/Gloves</span>" },
-      { name: "South Mountain 2", targetMile: 67.7, legMi: 10.9, gain: "+2787", loss: "-2980", planEta: "Aug 8, 11:48 PM", notes: "<span class='badge badge-crew'>Crew</span> <span class='badge badge-drop'>Drop Bag</span> Night Loop Complete" },
-      { name: "Squaw Springs", targetMile: 75.4, legMi: 7.7, gain: "+928", loss: "-1964", planEta: "Aug 9, 2:33 AM", notes: "<span class='badge badge-crew'>Crew</span> Pre-Dawn Cold" },
-      { name: "Geyser 2", targetMile: 81.0, legMi: 5.6, gain: "+1648", loss: "-179", planEta: "Aug 9, 4:42 AM", notes: "<span class='badge badge-drop'>Drop Bag</span> Sun Opening Up" },
-      { name: "Hazardous 2", targetMile: 88.0, legMi: 7.0, gain: "+848", loss: "-1966", planEta: "Aug 9, 7:00 AM", notes: "<span class='badge badge-drop'>Drop Bag</span> Drop Headlamp & Heavy Layers" },
-      { name: "Finish", targetMile: 99.2, legMi: 11.2, gain: "+2897", loss: "-4339", planEta: "Aug 9, 11:00 AM", notes: "Final 11.2 Mi Push to Buckle!" }
+      { name: "Upper Porcupine 1", targetMile: 6.5, legMi: 6.5, gain: "+516", loss: "-1094", planEta: "Aug 8, 6:16 AM", coords: [-109.358628, 38.578562], notes: "<span class='badge badge-crew'>Crew</span> Drop Headlamp & Gloves" },
+      { name: "Upper Porcupine 2", targetMile: 15.4, legMi: 8.9, gain: "+1500", loss: "-1556", planEta: "Aug 8, 8:10 AM", coords: [-109.358628, 38.578562], notes: "<span class='badge badge-crew'>Crew</span> Warming Up - Hydrate" },
+      { name: "Hazardous 1", targetMile: 23.2, legMi: 7.8, gain: "+2294", loss: "-241", planEta: "Aug 8, 10:44 AM", coords: [-109.2815, 38.5255], notes: "<span class='badge badge-drop'>Drop Bag</span> Peak Heat Climb" },
+      { name: "Geyser 1", targetMile: 32.0, legMi: 8.8, gain: "+3293", loss: "-2109", planEta: "Aug 8, 1:58 PM", coords: [-109.22586, 38.47884], notes: "<span class='badge badge-drop'>Drop Bag</span> Afternoon Push" },
+      { name: "Dark Canyon", targetMile: 42.2, legMi: 10.2, gain: "+506", loss: "-1824", planEta: "Aug 8, 4:01 PM", coords: [-109.17981, 38.41583], notes: "<span class='badge badge-crew'>Crew</span> Cruising Descent" },
+      { name: "Winter Creek", targetMile: 47.7, legMi: 5.5, gain: "+36", loss: "-1510", planEta: "Aug 8, 5:06 PM", coords: [-109.18627, 38.36465], notes: "<span class='badge badge-crew'>Crew</span> Grab Headlamp just in case" },
+      { name: "South Mountain 1", targetMile: 56.8, legMi: 9.1, gain: "+2515", loss: "-54", planEta: "Aug 8, 7:54 PM", coords: [-109.251646, 38.418903], notes: "<span class='badge badge-crew'>Crew</span> <span class='badge badge-drop'>Drop Bag</span> <span class='badge badge-gear'>Jacket/Gloves</span>" },
+      { name: "South Mountain 2", targetMile: 67.7, legMi: 10.9, gain: "+2787", loss: "-2980", planEta: "Aug 8, 11:48 PM", coords: [-109.251646, 38.418903], notes: "<span class='badge badge-crew'>Crew</span> <span class='badge badge-drop'>Drop Bag</span> Night Loop Complete" },
+      { name: "Squaw Springs", targetMile: 75.4, legMi: 7.7, gain: "+928", loss: "-1964", planEta: "Aug 9, 2:33 AM", coords: [-109.2898, 38.47916], notes: "<span class='badge badge-crew'>Crew</span> Pre-Dawn Cold" },
+      { name: "Geyser 2", targetMile: 81.0, legMi: 5.6, gain: "+1648", loss: "-179", planEta: "Aug 9, 4:42 AM", coords: [-109.22586, 38.47884], notes: "<span class='badge badge-drop'>Drop Bag</span> Sun Opening Up" },
+      { name: "Hazardous 2", targetMile: 88.0, legMi: 7.0, gain: "+848", loss: "-1966", planEta: "Aug 9, 7:00 AM", coords: [-109.2815, 38.5255], notes: "<span class='badge badge-drop'>Drop Bag</span> Drop Headlamp & Heavy Layers" },
+      { name: "Finish", targetMile: 99.2, legMi: 11.2, gain: "+2897", loss: "-4339", planEta: "Aug 9, 11:00 AM", coords: null, notes: "Final 11.2 Mi Push to Buckle!" }
     ];
 
     // Grouped popups for map icons
@@ -220,7 +238,6 @@
     const maxRadarLayers = 20;
 
     // --- GPX ARTIFACT SMOOTHING ALGORITHMS ---
-    // Aggressive Median Filter (Window 25) to kill wider GPX drops
     function removeElevationSpikes(data, windowSize = 25) {
       let result = [];
       let half = Math.floor(windowSize / 2);
@@ -235,7 +252,6 @@
       return result;
     }
     
-    // Moving Average (Window 9) to smooth the curve naturally
     function smoothElevation(data, windowSize = 9) {
       let result = [];
       let half = Math.floor(windowSize / 2);
@@ -275,7 +291,6 @@
           paint: { 'line-color': '#FF4500', 'line-width': 4, 'line-blur': 1 }
         });
 
-        // Ensure arrows stay on top after style change
         map.addLayer({
           id: 'course-arrows',
           type: 'symbol',
@@ -337,14 +352,20 @@
         }
         
         const currentMile = totalDist / 1609.34;
-        elevationLabels.push(Number(currentMile.toFixed(1)));
         
+        // Auto-populate Start and Finish coordinates from GPX if missing
+        aidStations.forEach(station => {
+            if (!station.coords && currentMile >= station.targetMile) {
+                station.coords = [coords[i][0], coords[i][1]];
+            }
+        });
+
+        elevationLabels.push(Number(currentMile.toFixed(1)));
         const elevFeet = coords[i][2] ? coords[i][2] * 3.28084 : 0;
         rawElevData.push(elevFeet);
         coursePoints.push([coords[i][0], coords[i][1]]);
       }
 
-      // Apply the aggressive artifact removal algorithms
       let cleanedElevData = removeElevationSpikes(rawElevData, 25);
       elevationData = smoothElevation(cleanedElevData, 9);
 
@@ -368,7 +389,6 @@
           paint: { 'line-color': '#FF4500', 'line-width': 4, 'line-blur': 1 }
         });
 
-        // Add Directional Arrows Layer
         map.addLayer({
           id: 'course-arrows',
           type: 'symbol',
@@ -397,15 +417,14 @@
           .addTo(map);
       });
 
-      // Start & Finish Flags
       new mapboxgl.Marker({ element: createCustomMarker('🏳️', 'green', true, '18px', '30px') })
         .setLngLat(coursePoints[0])
-        .setPopup(new mapboxgl.Popup({ offset: 15, closeButton: false }).setHTML('<div style="text-align:center;"><strong>Start</strong><br><span style="font-size:11px; color:#666;">Mi 0.0</span></div>'))
+        .setPopup(new mapboxgl.Popup({ offset: 15, closeButton: false }).setHTML('<div style="text-align:center; font-family:sans-serif;"><strong>Start</strong><br><span style="font-size:11px; color:#666;">Mi 0.0</span></div>'))
         .addTo(map);
 
       new mapboxgl.Marker({ element: createCustomMarker('🏁', 'black', true, '18px', '30px') })
         .setLngLat(coursePoints[coursePoints.length - 1])
-        .setPopup(new mapboxgl.Popup({ offset: 15, closeButton: false }).setHTML('<div style="text-align:center;"><strong>Finish</strong><br><span style="font-size:11px; color:#666;">Mi 99.2</span></div>'))
+        .setPopup(new mapboxgl.Popup({ offset: 15, closeButton: false }).setHTML('<div style="text-align:center; font-family:sans-serif;"><strong>Finish</strong><br><span style="font-size:11px; color:#666;">Mi 99.2</span></div>'))
         .addTo(map);
 
       map.fitBounds(courseBounds, { padding: 40 });
@@ -421,12 +440,25 @@
             data: elevationData,
             borderColor: '#1E3F66',
             fill: false,
-            pointRadius: 0
+            pointRadius: 0,
+            pointHoverRadius: 5
           }]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          interaction: {
+            mode: 'index',
+            intersect: false,
+          },
+          onHover: (event, elements) => {
+            if (elements && elements.length > 0) {
+              const index = elements[0].index;
+              hoverMarker.setLngLat(coursePoints[index]).addTo(map);
+            } else {
+              hoverMarker.remove();
+            }
+          },
           scales: {
             x: { title: { display: true, text: 'Distance (mi)' }, ticks: { callback: function(val) { return this.getLabelForValue(val).toFixed(1); } } },
             y: { title: { display: true, text: 'Elev (ft)' } }
@@ -469,9 +501,12 @@
           liveEtaStr = st.planEta; 
         }
 
+        // Setup the Google Maps Navigation URL
+        const navLink = st.coords ? `<br><a href="https://www.google.com/maps/dir/?api=1&destination=${st.coords[1]},${st.coords[0]}" target="_blank" class="nav-link-btn">🧭 Navigate</a>` : '';
+
         row.className = statusClass;
         row.innerHTML = `
-          <td><strong>${st.name}</strong></td>
+          <td><strong>${st.name}</strong>${navLink}</td>
           <td>${st.targetMile}</td>
           <td>${st.planEta}</td>
           <td><strong>${liveEtaStr}</strong></td>
