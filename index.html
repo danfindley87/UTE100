@@ -22,12 +22,12 @@
     
     #map { width: 100%; height: 100%; position: relative; transition: height 0.3s ease; }
     
-    #elevationContainer { width: 100%; height: 0%; background: white; transition: height 0.3s ease, border-color 0.3s; overflow: hidden; position: relative; touch-action: none; /* FIX #4: TOUCH ACTION */ }
+    #elevationContainer { width: 100%; height: 0%; background: white; transition: height 0.3s ease, border-color 0.3s; overflow: hidden; position: relative; touch-action: none; }
     .chart-wrapper { position: absolute; top: 0; left: 0; right: 0; bottom: 0; padding: 15px 15px 35px 15px; box-sizing: border-box; }
     #elevationChart { width: 100%; height: 100%; display: block; }
     
     #tableContainer { width: 100%; height: 0%; overflow-y: auto; overflow-x: auto; background: #ffffff; transition: height 0.3s ease; }
-    .table-wrapper { padding: 10px; min-width: 800px; } /* Ensures table doesn't squish too much on mobile */
+    .table-wrapper { padding: 10px; min-width: 800px; } 
     
     /* Main Stats Panel */
     #infoPanel { position: absolute; top: 10px; left: 10px; background: rgba(255, 255, 255, 0.95); padding: 10px 14px; border-radius: 8px; font-size: 13px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); z-index: 999; transition: background 0.3s, color 0.3s; max-width: calc(100% - 40px); }
@@ -35,7 +35,7 @@
     #lastUpdate { font-size: 12px; margin-top: 3px; color: #333; transition: color 0.3s; font-weight: 500; }
     .stale-warning { color: #f57c00 !important; font-weight: bold; }
     .stale-danger { color: #d32f2f !important; font-weight: bold; }
-    #averagePace, #estFinish, #climbInfo, #deltaTarget { font-size: 12px; margin-top: 3px; color: #333; transition: color 0.3s; }
+    #averagePace, #estFinish, #climbInfo { font-size: 12px; margin-top: 3px; color: #333; transition: color 0.3s; }
     
     /* Floating Bottom Navigation Menu */
     #bottomNav { position: absolute; bottom: 25px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 1000; width: 95%; max-width: 450px; justify-content: center; }
@@ -70,7 +70,6 @@
     body.dark-mode #infoPanel .title { color: #82b1ff; }
     body.dark-mode #averagePace, body.dark-mode #climbInfo { color: #ccc; }
     body.dark-mode #estFinish { color: #4caf50; }
-    body.dark-mode #deltaTarget { color: #ff5252; }
     body.dark-mode #settingsMenu { background: rgba(35, 35, 35, 0.98); border-color: #555; color: #eee; }
     body.dark-mode .settings-title { color: #82b1ff; border-color: #555; }
     body.dark-mode .settings-btn { background: #444; color: #eee; border-color: #666; }
@@ -89,13 +88,12 @@
 <body>
   <div id="map">
     <div id="infoPanel">
-      <div class="title">Ute 100 Tracker (32-Hr)</div>
+      <div class="title">Ute 100 Tracker</div>
       Mile: <span id="mile">0.0</span> | Elev: <span id="elev">0</span> ft | Left: <span id="remain">0</span> mi
       <div id="climbInfo">Climbed: 0 ft | To Go: 0 ft</div>
       <div id="lastUpdate">Location: Waiting for InReach...</div>
-      <div id="averagePace" style="font-weight: bold;">Current Leg Pace: --</div>
-      <div id="estFinish" style="font-weight: bold; color: #2e7d32;">Dynamic Live ETA: --</div>
-      <div id="deltaTarget" style="font-weight: bold; color: #B22222;">Vs 32-Hr Plan: --</div>
+      <div id="averagePace" style="font-weight: bold;">Current Pace: --</div>
+      <div id="estFinish" style="font-weight: bold; color: #2e7d32;">Finish ETA: --</div>
     </div>
 
     <div id="bottomNav">
@@ -133,11 +131,10 @@
           <tr>
             <th>Aid Station</th>
             <th>Mile</th>
-            <th>Leg Dist</th>
-            <th>32-Hr Plan ETA</th>
-            <th>Live Proj / Actual ETA</th>
-            <th>Plan Pace</th>
-            <th>Actual Pace</th>
+            <th>Leg Dist & Elev</th>
+            <th>Plan Time & ETA</th>
+            <th>Live Time & ETA</th>
+            <th>Pace (Plan/Act)</th>
             <th>Nutrition & Crew Notes</th>
           </tr>
         </thead>
@@ -149,7 +146,7 @@
   </div>
 
   <script>
-    // FIX #2: Register Service Worker for Offline PWA Support
+    // Offline PWA Support
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').then(() => console.log("Offline SW Registered"));
     }
@@ -201,21 +198,20 @@
     hoverEl.style.pointerEvents = 'none'; 
     const hoverMarker = new mapboxgl.Marker({ element: hoverEl });
 
-    // FIX #1: UPDATED 32-HOUR DYNAMIC PACING DATA
     const aidStations = [
-      { name: "Start", targetMile: 0.0, legMi: 0, planMins: 0, planEta: "Aug 8, 5:00 AM", coords: null, notes: "2 Gels | 2 Salt (Cool)" },
-      { name: "Upper Porcupine 1", targetMile: 6.5, legMi: 6.5, planMins: 81, planEta: "Aug 8, 6:21 AM", coords: [-109.358628, 38.578562], notes: "<span class='badge badge-crew'>Crew</span> 3 Gels | 3-4 Salt (Warming)" },
-      { name: "Upper Porcupine 2", targetMile: 15.4, legMi: 8.9, planMins: 121, planEta: "Aug 8, 8:22 AM", coords: [-109.358628, 38.578562], notes: "<span class='badge badge-crew'>Crew</span> 4 Gels | 6-8 Salt (Hot)" },
-      { name: "Hazardous 1", targetMile: 23.2, legMi: 7.8, planMins: 164, planEta: "Aug 8, 11:06 AM", coords: [-109.2815, 38.5255], notes: "<span class='badge badge-drop'>Drop Bag</span> 4 Gels | 8 Salt (Peak Heat)" },
-      { name: "Geyser 1", targetMile: 32.0, legMi: 8.8, planMins: 206, planEta: "Aug 8, 2:33 PM", coords: [-109.22586, 38.47884], notes: "<span class='badge badge-drop'>Drop Bag</span> 4 Gels | 8 Salt (Afternoon)" },
-      { name: "Dark Canyon", targetMile: 42.2, legMi: 10.2, planMins: 131, planEta: "Aug 8, 4:45 PM", coords: [-109.17981, 38.41583], notes: "<span class='badge badge-crew'>Crew</span> 2 Gels | 3-4 Salt (Late Aft)" },
-      { name: "Winter Creek", targetMile: 47.7, legMi: 5.5, planMins: 69, planEta: "Aug 8, 5:54 PM", coords: [-109.18627, 38.36465], notes: "<span class='badge badge-crew'>Crew</span> 4 Gels | 4 Salt (Dusk)" },
-      { name: "South Mountain 1", targetMile: 56.8, legMi: 9.1, planMins: 179, planEta: "Aug 8, 8:53 PM", coords: [-109.251646, 38.418903], notes: "<span class='badge badge-crew'>Crew</span> <span class='badge badge-drop'>Drop Bag</span> 6 Gels | 6 Salt (Night)" },
-      { name: "South Mountain 2", targetMile: 67.7, legMi: 10.9, planMins: 249, planEta: "Aug 9, 1:03 AM", coords: [-109.251646, 38.418903], notes: "<span class='badge badge-crew'>Crew</span> <span class='badge badge-drop'>Drop Bag</span> 4 Gels | 4 Salt (Night)" },
-      { name: "Squaw Springs", targetMile: 75.4, legMi: 7.7, planMins: 176, planEta: "Aug 9, 3:59 AM", coords: [-109.2898, 38.47916], notes: "<span class='badge badge-crew'>Crew</span> 3 Gels | 3 Salt (Pre-dawn)" },
-      { name: "Geyser 2", targetMile: 81.0, legMi: 5.6, planMins: 137, planEta: "Aug 9, 6:16 AM", coords: [-109.22586, 38.47884], notes: "<span class='badge badge-drop'>Drop Bag</span> 4 Gels | 4-6 Salt (Sun up)" },
-      { name: "Hazardous 2", targetMile: 88.0, legMi: 7.0, planMins: 147, planEta: "Aug 9, 8:44 AM", coords: [-109.2815, 38.5255], notes: "<span class='badge badge-drop'>Drop Bag</span> 5 Gels | 8-10 Salt (Daytime)" },
-      { name: "Finish", targetMile: 99.2, legMi: 11.2, planMins: 256, planEta: "Aug 9, 1:00 PM", coords: null, notes: "Final Push to Buckle!" }
+      { name: "Start", targetMile: 0.0, legMi: 0, planMins: 0, gain: "+0", loss: "-0", planEta: "Aug 8, 5:00 AM", coords: null, notes: "2 Gels | 2 Salt (Cool)" },
+      { name: "Upper Porcupine 1", targetMile: 6.5, legMi: 6.5, planMins: 81, gain: "+516 ft", loss: "-1,094 ft", planEta: "Aug 8, 6:21 AM", coords: [-109.358628, 38.578562], notes: "<span class='badge badge-crew'>Crew</span> 3 Gels | 3-4 Salt (Warming)" },
+      { name: "Upper Porcupine 2", targetMile: 15.4, legMi: 8.9, planMins: 121, gain: "+1,500 ft", loss: "-1,556 ft", planEta: "Aug 8, 8:22 AM", coords: [-109.358628, 38.578562], notes: "<span class='badge badge-crew'>Crew</span> 4 Gels | 6-8 Salt (Hot)" },
+      { name: "Hazardous 1", targetMile: 23.2, legMi: 7.8, planMins: 164, gain: "+2,294 ft", loss: "-241 ft", planEta: "Aug 8, 11:06 AM", coords: [-109.2815, 38.5255], notes: "<span class='badge badge-drop'>Drop Bag</span> 4 Gels | 8 Salt (Peak Heat)" },
+      { name: "Geyser 1", targetMile: 32.0, legMi: 8.8, planMins: 206, gain: "+3,293 ft", loss: "-2,109 ft", planEta: "Aug 8, 2:33 PM", coords: [-109.22586, 38.47884], notes: "<span class='badge badge-drop'>Drop Bag</span> 4 Gels | 8 Salt (Afternoon)" },
+      { name: "Dark Canyon", targetMile: 42.2, legMi: 10.2, planMins: 131, gain: "+506 ft", loss: "-1,824 ft", planEta: "Aug 8, 4:45 PM", coords: [-109.17981, 38.41583], notes: "<span class='badge badge-crew'>Crew</span> 2 Gels | 3-4 Salt (Late Aft)" },
+      { name: "Winter Creek", targetMile: 47.7, legMi: 5.5, planMins: 69, gain: "+36 ft", loss: "-1,510 ft", planEta: "Aug 8, 5:54 PM", coords: [-109.18627, 38.36465], notes: "<span class='badge badge-crew'>Crew</span> 4 Gels | 4 Salt (Dusk)" },
+      { name: "South Mountain 1", targetMile: 56.8, legMi: 9.1, planMins: 179, gain: "+2,515 ft", loss: "-54 ft", planEta: "Aug 8, 8:53 PM", coords: [-109.251646, 38.418903], notes: "<span class='badge badge-crew'>Crew</span> <span class='badge badge-drop'>Drop Bag</span> 6 Gels | 6 Salt (Night)" },
+      { name: "South Mountain 2", targetMile: 67.7, legMi: 10.9, planMins: 249, gain: "+2,787 ft", loss: "-2,980 ft", planEta: "Aug 9, 1:03 AM", coords: [-109.251646, 38.418903], notes: "<span class='badge badge-crew'>Crew</span> <span class='badge badge-drop'>Drop Bag</span> 4 Gels | 4 Salt (Night)" },
+      { name: "Squaw Springs", targetMile: 75.4, legMi: 7.7, planMins: 176, gain: "+928 ft", loss: "-1,964 ft", planEta: "Aug 9, 3:59 AM", coords: [-109.2898, 38.47916], notes: "<span class='badge badge-crew'>Crew</span> 3 Gels | 3 Salt (Pre-dawn)" },
+      { name: "Geyser 2", targetMile: 81.0, legMi: 5.6, planMins: 137, gain: "+1,648 ft", loss: "-179 ft", planEta: "Aug 9, 6:16 AM", coords: [-109.22586, 38.47884], notes: "<span class='badge badge-drop'>Drop Bag</span> 4 Gels | 4-6 Salt (Sun up)" },
+      { name: "Hazardous 2", targetMile: 88.0, legMi: 7.0, planMins: 147, gain: "+848 ft", loss: "-1,966 ft", planEta: "Aug 9, 8:44 AM", coords: [-109.2815, 38.5255], notes: "<span class='badge badge-drop'>Drop Bag</span> 5 Gels | 8-10 Salt (Daytime)" },
+      { name: "Finish", targetMile: 99.2, legMi: 11.2, planMins: 256, gain: "+2,897 ft", loss: "-4,339 ft", planEta: "Aug 9, 1:00 PM", coords: null, notes: "Final Push to Buckle!" }
     ];
 
     const groupedMarkers = [
@@ -239,7 +235,6 @@
     let radarStrength = 10;
     const maxRadarLayers = 20;
 
-    // Tracker History for Interpolation
     let trackHistory = []; 
 
     function removeElevationSpikes(data, windowSize = 25) {
@@ -272,14 +267,12 @@
     map.on('load', async () => {
       await initCourse(); 
       setupUIControls();
-      
       preloadRadarLayers(); 
       updateRadarVisibility(false);
       
-      // FIX #5: Auto-Night Mode Initialization
       const currentHour = new Date().getHours();
       if (currentHour >= 20 || currentHour < 6) {
-        document.getElementById('toggleNight').click(); // Auto-switch to dark
+        document.getElementById('toggleNight').click();
       }
 
       fetchGarminLocation();
@@ -308,7 +301,6 @@
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(kmlText, "application/xml");
         
-        // Parse ALL placemarks to build interpolation history
         const placemarks = Array.from(xmlDoc.querySelectorAll("Placemark"));
         trackHistory = [];
 
@@ -375,6 +367,11 @@
         rawElevData.push(coords[i][2] ? coords[i][2] * 3.28084 : 0);
         coursePoints.push([coords[i][0], coords[i][1]]);
       }
+      
+      // Forcefully assign exact finish coordinate to guarantee navigation button
+      if (!aidStations[aidStations.length - 1].coords && coursePoints.length > 0) {
+          aidStations[aidStations.length - 1].coords = coursePoints[coursePoints.length - 1];
+      }
 
       let cleanedElevData = removeElevationSpikes(rawElevData, 25);
       elevationData = smoothElevation(cleanedElevData, 9);
@@ -399,6 +396,7 @@
 
       new mapboxgl.Marker({ element: createCustomMarker('🏳️', 'green', true, '18px', '30px') }).setLngLat(coursePoints[0]).setPopup(new mapboxgl.Popup({ offset: 15, closeButton: false }).setHTML('<div style="text-align:center; font-family:sans-serif;"><strong>Start</strong><br><span style="font-size:11px; color:#666;">Mi 0.0</span></div>')).addTo(map);
       new mapboxgl.Marker({ element: createCustomMarker('🏁', 'black', true, '18px', '30px') }).setLngLat(coursePoints[coursePoints.length - 1]).setPopup(new mapboxgl.Popup({ offset: 15, closeButton: false }).setHTML('<div style="text-align:center; font-family:sans-serif;"><strong>Finish</strong><br><span style="font-size:11px; color:#666;">Mi 99.2</span></div>')).addTo(map);
+      
       map.fitBounds(courseBounds, { padding: 40 });
       buildPacingTable({ mile: 0, time: null });
 
@@ -430,12 +428,11 @@
         if (trackHistory[i].mile >= targetMile && !pingAfter) pingAfter = trackHistory[i];
       }
 
-      if (pingBefore && !pingAfter) return pingBefore.time; // Hasn't arrived yet, returning last ping as fallback if forced
+      if (pingBefore && !pingAfter) return pingBefore.time; 
       if (!pingBefore && pingAfter) return RACE_START_TIME; 
       
       if (pingBefore && pingAfter) {
           if (pingBefore.mile === pingAfter.mile) return pingBefore.time;
-          // Linear Interpolation
           const ratio = (targetMile - pingBefore.mile) / (pingAfter.mile - pingBefore.mile);
           const timeDiffMs = pingAfter.time.getTime() - pingBefore.time.getTime();
           return new Date(pingBefore.time.getTime() + (timeDiffMs * ratio));
@@ -461,7 +458,7 @@
     function buildPacingTable(latestUpdate) {
       const tbody = document.getElementById('aidTableBody');
       tbody.innerHTML = '';
-      const currentMile = latestUpdate.mile;
+      const currentMile = latestUpdate.mile || 0;
 
       let previousActualTime = RACE_START_TIME;
 
@@ -475,44 +472,38 @@
         if (hasPassed) statusClass = 'status-passed';
         else if (isNext) statusClass = 'status-next';
 
-        // Plan Pace Calc
+        // Plan Time & Pace Math
+        let planTimeStr = st.legMi > 0 ? `${Math.floor(st.planMins/60)}h ${Math.floor(st.planMins%60).toString().padStart(2, '0')}m` : "--";
         const planPaceStr = st.legMi > 0 ? formatPace(st.planMins / st.legMi) : "--";
 
-        // Actual Calc via Interpolation
         let actualTime = null;
         let actualPaceStr = "--";
         let displayEta = "--";
+        let legTimeStr = "--";
 
         if (st.targetMile === 0) {
             actualTime = RACE_START_TIME;
             displayEta = formatTime(actualTime);
         } else if (hasPassed) {
             actualTime = interpolateArrivalTime(st.targetMile);
-            displayEta = `Actual: ${formatTime(actualTime)}`;
+            displayEta = `Act: ${formatTime(actualTime)}`;
             if (actualTime && previousActualTime && st.legMi > 0) {
                 const legMins = (actualTime - previousActualTime) / 60000;
+                legTimeStr = `${Math.floor(legMins/60)}h ${Math.floor(legMins%60).toString().padStart(2, '0')}m`;
                 actualPaceStr = formatPace(legMins / st.legMi);
             }
         } else if (latestUpdate.time) {
-            // Dynamic ETA: Current Time + (Remaining Leg Dist * Plan Pace) + Future Legs
             let futureMins = 0;
             if (isNext) {
                 const remainingLegMi = st.targetMile - currentMile;
-                const pace = st.planMins / st.legMi; // plan pace for this leg
+                const pace = st.planMins / st.legMi; 
                 futureMins += (remainingLegMi * pace);
             } else {
-                // It's a future leg. We need to add the full planMins of this leg, 
-                // PLUS the projected arrival time of the previous leg.
-                // Simpler: Find total minutes from *current location* to this aid station based on plan.
-                
-                let distToCover = st.targetMile - currentMile;
-                // Start with the current leg's remainder
                 let currentLegIdx = aidStations.findIndex(a => a.targetMile > currentMile);
                 let currentLeg = aidStations[currentLegIdx];
                 let currentLegRem = currentLeg.targetMile - currentMile;
                 futureMins += (currentLegRem * (currentLeg.planMins / currentLeg.legMi));
 
-                // Add full plan times for intermediate legs
                 for (let j = currentLegIdx + 1; j <= idx; j++) {
                     futureMins += aidStations[j].planMins;
                 }
@@ -526,18 +517,19 @@
         }
 
         if (actualTime) previousActualTime = actualTime;
+        if (idx === aidStations.length - 1) document.getElementById('estFinish').textContent = `Finish ETA: ${displayEta.replace('Proj: ', '').replace('Act: ', '')}`;
 
         const navLink = st.coords ? `<br><a href="https://www.google.com/maps/dir/?api=1&destination=${st.coords[1]},${st.coords[0]}" target="_blank" class="nav-link-btn">🧭 Navigate</a>` : '';
+        const gainLoss = st.gain && st.loss ? `<br><span style="color:#2e7d32">${st.gain}</span> / <span style="color:#c62828">${st.loss}</span>` : "";
 
         row.className = statusClass;
         row.innerHTML = `
           <td><strong>${st.name}</strong>${navLink}</td>
           <td>${st.targetMile}</td>
-          <td>${st.legMi} mi</td>
-          <td>${st.planEta}</td>
-          <td><strong>${displayEta}</strong></td>
-          <td>${planPaceStr}</td>
-          <td><strong>${actualPaceStr}</strong></td>
+          <td>${st.legMi} mi${gainLoss}</td>
+          <td>${planTimeStr}<br><strong>${st.planEta}</strong></td>
+          <td>${legTimeStr}<br><strong>${displayEta}</strong></td>
+          <td>Plan: ${planPaceStr}<br>Act: ${actualPaceStr}</td>
           <td>${st.notes}</td>
         `;
         tbody.appendChild(row);
@@ -568,7 +560,6 @@
       document.getElementById('remain').textContent = remainMiles;
       document.getElementById('climbInfo').textContent = `Climbed: ${climbedFt} ft | To Go: ${climbRemaining} ft`;
 
-      // Stale Ping Logic (Fix #3)
       const now = new Date();
       const ageMins = (now - latest.time) / 60000;
       const lastUpdateEl = document.getElementById('lastUpdate');
@@ -582,36 +573,20 @@
           lastUpdateEl.classList.add('stale-warning');
       }
 
-      // Dynamic Overall Status
-      const elapsedMinutes = (latest.time - RACE_START_TIME) / 60000;
-      if (elapsedMinutes > 0 && latest.mile > 0.1) {
-        // Calculate pace for JUST the current leg
-        let currentLegIdx = aidStations.findIndex(a => a.targetMile > latest.mile);
-        if (currentLegIdx > 0) {
-            let prevStation = aidStations[currentLegIdx - 1];
-            let actualArrival = interpolateArrivalTime(prevStation.targetMile);
-            if (actualArrival) {
-                let legElapsedMins = (latest.time - actualArrival) / 60000;
-                let legDistCovered = latest.mile - prevStation.targetMile;
-                document.getElementById('averagePace').textContent = `Current Leg Pace: ${formatPace(legElapsedMins/legDistCovered)}`;
-            }
-        }
-
-        // Target Mins calc
-        let targetMinsAtDist = 0;
-        for(let i=1; i<=currentLegIdx; i++) {
-            if (i === currentLegIdx) {
-                // Partial leg
-                let distIntoLeg = latest.mile - aidStations[i-1].targetMile;
-                targetMinsAtDist += distIntoLeg * (aidStations[i].planMins / aidStations[i].legMi);
-            } else {
-                targetMinsAtDist += aidStations[i].planMins;
-            }
-        }
-        
-        const deltaMins = Math.round(elapsedMinutes - targetMinsAtDist);
-        const deltaStr = deltaMins <= 0 ? `${Math.abs(deltaMins)} mins AHEAD` : `${deltaMins} mins BEHIND`;
-        document.getElementById('deltaTarget').textContent = `Vs 32-Hr Plan: ${deltaStr}`;
+      // Exact Current Pace using Ping-to-Ping history
+      if (trackHistory.length > 1) {
+          const latestPing = trackHistory[trackHistory.length - 1];
+          const prevPing = trackHistory[trackHistory.length - 2];
+          const dist = Math.max(0, latestPing.mile - prevPing.mile);
+          const timeDiffMins = (latestPing.time - prevPing.time) / 60000;
+          
+          if (dist > 0.02) { 
+              document.getElementById('averagePace').textContent = `Current Pace: ${formatPace(timeDiffMins / dist)}`;
+          } else if (timeDiffMins > 0) {
+              document.getElementById('averagePace').textContent = `Current Pace: Idle (< 0.02 mi)`;
+          }
+      } else {
+          document.getElementById('averagePace').textContent = `Current Pace: --`;
       }
 
       buildPacingTable(latest);
