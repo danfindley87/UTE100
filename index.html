@@ -131,9 +131,9 @@
           <tr>
             <th>Aid Station</th>
             <th>Mile</th>
-            <th>Leg Dist & Elev</th>
-            <th>Plan Time & ETA</th>
-            <th>Live Time & ETA</th>
+            <th>Leg to Station<br><span style="font-size:10px; font-weight:normal; opacity:0.85;">(From Prev Aid)</span></th>
+            <th>Plan Leg Duration<br>& ETA</th>
+            <th>Live Leg Duration<br>& ETA</th>
             <th>Pace (Plan/Act)</th>
             <th>Nutrition & Crew Notes</th>
           </tr>
@@ -368,7 +368,6 @@
         coursePoints.push([coords[i][0], coords[i][1]]);
       }
       
-      // Forcefully assign exact finish coordinate to guarantee navigation button
       if (!aidStations[aidStations.length - 1].coords && coursePoints.length > 0) {
           aidStations[aidStations.length - 1].coords = coursePoints[coursePoints.length - 1];
       }
@@ -472,7 +471,6 @@
         if (hasPassed) statusClass = 'status-passed';
         else if (isNext) statusClass = 'status-next';
 
-        // Plan Time & Pace Math
         let planTimeStr = st.legMi > 0 ? `${Math.floor(st.planMins/60)}h ${Math.floor(st.planMins%60).toString().padStart(2, '0')}m` : "--";
         const planPaceStr = st.legMi > 0 ? formatPace(st.planMins / st.legMi) : "--";
 
@@ -526,7 +524,7 @@
         row.innerHTML = `
           <td><strong>${st.name}</strong>${navLink}</td>
           <td>${st.targetMile}</td>
-          <td>${st.legMi} mi${gainLoss}</td>
+          <td><strong>${st.legMi} mi</strong>${gainLoss}</td>
           <td>${planTimeStr}<br><strong>${st.planEta}</strong></td>
           <td>${legTimeStr}<br><strong>${displayEta}</strong></td>
           <td>Plan: ${planPaceStr}<br>Act: ${actualPaceStr}</td>
@@ -573,7 +571,6 @@
           lastUpdateEl.classList.add('stale-warning');
       }
 
-      // Exact Current Pace using Ping-to-Ping history
       if (trackHistory.length > 1) {
           const latestPing = trackHistory[trackHistory.length - 1];
           const prevPing = trackHistory[trackHistory.length - 2];
