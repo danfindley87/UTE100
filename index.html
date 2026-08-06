@@ -55,6 +55,12 @@
     table.pacingTable th { background-color: #1E3F66; color: white; padding: 10px 8px; position: sticky; top: 0; z-index: 10; transition: background 0.3s, color 0.3s; }
     table.pacingTable td { padding: 10px 8px; border-bottom: 1px solid #e0e0e0; transition: border-color 0.3s; vertical-align: top; }
     table.pacingTable tr:nth-child(even) { background-color: #f9fafb; transition: background 0.3s; }
+    
+    /* Interactive Row Hover & Click Highlights */
+    table.pacingTable tbody tr { cursor: pointer; transition: background-color 0.2s, outline 0.2s; }
+    table.pacingTable tbody tr:hover { background-color: #e3f2fd !important; }
+    tr.selected-row { background-color: #fff9c4 !important; outline: 2px solid #fbc02d; }
+
     .status-passed { color: #888; background-color: #f0f0f0 !important; }
     .status-next { color: #c62828; font-weight: bold; background-color: #ffebee !important; }
     .badge { padding: 3px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; display: inline-block; line-height: 1.2; margin-bottom: 2px; }
@@ -79,6 +85,8 @@
     body.dark-mode table.pacingTable th { background-color: #222; color: #82b1ff; }
     body.dark-mode table.pacingTable td { border-bottom: 1px solid #333; }
     body.dark-mode table.pacingTable tr:nth-child(even) { background-color: #2a2a2a; }
+    body.dark-mode table.pacingTable tbody tr:hover { background-color: #1e3a5f !important; }
+    body.dark-mode tr.selected-row { background-color: #3f3a18 !important; outline: 2px solid #fbc02d; }
     body.dark-mode .status-passed { color: #888; background-color: #1a1a1a !important; }
     body.dark-mode .status-next { color: #ff8a80; background-color: #4a1c1c !important; }
     body.dark-mode .nav-link-btn { background-color: #01579b; color: #e1f5fe; border-color: #0288d1; }
@@ -236,6 +244,34 @@
     const maxRadarLayers = 20;
 
     let trackHistory = []; 
+
+    // Custom Chart.js Plugin to Draw Vertical Aid Station Lines
+    const aidStationLinesPlugin = {
+      id: 'aidStationLines',
+      afterDraw: (chart) => {
+        const { ctx, chartArea: { top, bottom }, scales: { x } } = chart;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(211, 47, 47, 0.45)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        aidStations.forEach(st => {
+          let bestIdx = 0;
+          let minDiff = Infinity;
+          elevationLabels.forEach((lbl, idx) => {
+            let diff = Math.abs(lbl - st.targetMile);
+            if (diff < minDiff) { minDiff = diff; bestIdx = idx; }
+          });
+          const xPos = x.getPixelForValue(bestIdx);
+          if (xPos) {
+            ctx.beginPath();
+            ctx.moveTo(xPos, top);
+            ctx.lineTo(xPos, bottom);
+            ctx.stroke();
+          }
+        });
+        ctx.restore();
+      }
+    };
 
     function removeElevationSpikes(data, windowSize = 25) {
       let result = [];
@@ -399,21 +435,87 @@
       map.fitBounds(courseBounds, { padding: 40 });
       buildPacingTable({ mile: 0, time: null });
 
+      // Prepare Aid Station Triangle Data for Elevation Profile
+      let aidStationElevData = new Array(elevationData.length).fill(null);
+      window.aidStationNamesMap = {};
+      aidStations.forEach(st => {
+        let bestIdx = 0;
+        let minDiff = Infinity;
+        elevationLabels.forEach((lbl, idx) => {
+          let diff = Math.abs(lbl - st.targetMile);
+          if (diff < minDiff) { minDiff = diff; bestIdx = idx; }
+        });
+        aidStationElevData[bestIdx] = elevationData[bestIdx];
+        window.aidStationNamesMap[bestIdx] = st.name;
+      });
+
       const ctx = document.getElementById('elevationChart').getContext('2d');
       elevationChart = new Chart(ctx, {
         type: 'line',
-        data: { labels: elevationLabels, datasets: [{ label: 'Elevation (ft)', data: elevationData, borderColor: '#1E3F66', fill: false, pointRadius: 0, pointHoverRadius: 5 }] },
+        data: {
+          labels: elevationLabels,
+          datasets: [
+            {
+              label: 'Elevation (ft)',
+              data: elevationData,
+              borderColor: '#1E3F66',
+              fill: false,
+              pointRadius: 0,
+              pointHoverRadius: 5
+            },
+            {
+              label: 'Current Position',
+              data: new Array(elevationData.length).fill(null),
+              borderColor: 'red',
+              backgroundColor: 'red',
+              pointRadius: 6,
+              showLine: false
+            },
+            {
+              label: 'Aid Stations',
+              data: aidStationElevData,
+              borderColor: '#ffffff',
+              backgroundColor: '#d32f2f',
+              pointRadius: 6,
+              pointHoverRadius: 8,
+              pointStyle: 'triangle',
+              pointBorderWidth: 1.5,
+              showLine: false
+            }
+          ]
+        },
         options: {
-          responsive: true, maintainAspectRatio: false,
+          responsive: true,
+          maintainAspectRatio: false,
           interaction: { mode: 'index', intersect: false },
           onHover: (event, elements) => {
             if (elements && elements.length > 0) {
               hoverMarker.setLngLat(coursePoints[elements[0].index]).addTo(map);
             } else hoverMarker.remove();
           },
-          scales: { x: { title: { display: true, text: 'Distance (mi)' }, ticks: { callback: function(val) { return this.getLabelForValue(val).toFixed(1); } } }, y: { title: { display: true, text: 'Elev (ft)' } } },
-          plugins: { legend: { display: false } }
-        }
+          scales: {
+            x: { title: { display: true, text: 'Distance (mi)' }, ticks: { callback: function(val) { return this.getLabelForValue(val).toFixed(1); } } },
+            y: { title: { display: true, text: 'Elev (ft)' } }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  if (context.datasetIndex === 2) {
+                    const stName = window.aidStationNamesMap[context.dataIndex] || 'Aid Station';
+                    return `📍 ${stName} (Mi ${context.label}): ${context.raw} ft`;
+                  }
+                  if (context.datasetIndex === 1) {
+                    return `🏃 Current Position: ${context.raw} ft`;
+                  }
+                  return `Elev: ${context.raw} ft`;
+                }
+              }
+            }
+          }
+        },
+        plugins: [aidStationLinesPlugin]
       });
     }
 
@@ -530,6 +632,24 @@
           <td>Plan: ${planPaceStr}<br>Act: ${actualPaceStr}</td>
           <td>${st.notes}</td>
         `;
+
+        // Interactive Table Row Click Handler -> Highlight Row & Fly to Map Station
+        row.addEventListener('click', (e) => {
+          if (e.target.classList.contains('nav-link-btn')) return;
+          
+          document.querySelectorAll('#aidTableBody tr').forEach(r => r.classList.remove('selected-row'));
+          row.classList.add('selected-row');
+
+          if (st.coords) {
+            map.flyTo({ center: st.coords, zoom: 13.5, essential: true });
+            if (window.activeStationPopup) window.activeStationPopup.remove();
+            window.activeStationPopup = new mapboxgl.Popup({ offset: 20, closeOnClick: true })
+              .setLngLat(st.coords)
+              .setHTML(`<div style="text-align:center; font-family:sans-serif; padding:6px 10px;"><strong>📍 ${st.name}</strong><br><span style="font-size:11px; color:#666;">Mile ${st.targetMile} (${st.legMi} mi leg)</span></div>`)
+              .addTo(map);
+          }
+        });
+
         tbody.appendChild(row);
       });
     }
@@ -588,6 +708,7 @@
 
       buildPacingTable(latest);
 
+      // Only update Dataset 1 (Current Position dot) so Aid Stations (Dataset 2) remain untouched
       elevationChart.data.datasets[1] = {
         label: 'Current Position',
         data: elevationData.map((val, idx) => idx === closestIndex ? val : null),
