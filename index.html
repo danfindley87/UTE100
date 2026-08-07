@@ -311,58 +311,66 @@
         document.getElementById('toggleNight').click();
       }
 
-      fetchGarminLocation();
-      setInterval(fetchGarminLocation, 120000); 
-      initialLoadComplete = true; 
-    });
+      async function fetchGarminLocation() {
+  const CORS_PROXY = "https://blue-bird-7fdf.climberdf.workers.dev/?url=";
+  
+  try {
+    const response = await fetch(`${CORS_PROXY}${GARMIN_FEED}`);
+    if (!response.ok) throw new Error(`HTTP status: ${response.status}`);
+    
+    const kmlText = await response.text();
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(kmlText, "application/xml");
 
-    map.on('style.load', () => {
-      if (!initialLoadComplete) return; 
-      if (window.courseDataGeoJson && !map.getSource('course')) {
-        map.addSource('course', { type: 'geojson', data: window.courseDataGeoJson });
-        map.addLayer({ id: 'course-line', type: 'line', source: 'course', paint: { 'line-color': '#FF4500', 'line-width': 4, 'line-blur': 1 } });
-        map.addLayer({ id: 'course-arrows', type: 'symbol', source: 'course', layout: { 'symbol-placement': 'line', 'symbol-spacing': 80, 'text-field': '▶', 'text-size': 16, 'text-keep-upright': false }, paint: { 'text-color': '#ffffff', 'text-halo-color': '#FF4500', 'text-halo-width': 1.5 } });
-      }
-      preloadRadarLayers();
-      const radarToggle = document.getElementById('toggleRadar');
-      if (radarToggle) updateRadarVisibility(radarToggle.checked);
-    });
+    const placemarks = Array.from(xmlDoc.querySelectorAll("Placemark"));
+    trackHistory = [];
 
-    async function fetchGarminLocation() {
-      const CORS_PROXY = "https://blue-bird-7fdf.climberdf.workers.dev/?url=";
-      try {
-        const response = await fetch(`${CORS_PROXY}${GARMIN_FEED}`);
-        if (!response.ok) throw new Error(`HTTP status: ${response.status}`);
-        const kmlText = await response.text();
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(kmlText, "application/xml");
-        
-        const placemarks = Array.from(xmlDoc.querySelectorAll("Placemark"));
-        trackHistory = [];
+    placemarks.forEach(pm => {
+      const timeEl = pm.querySelector("TimeStamp when") || pm.querySelector("when");
+      const coordEl = pm.querySelector("Point coordinates");
 
-        placemarks.forEach(pm => {
-          const coordEl = pm.querySelector("coordinates");
-          const timeEl = pm.querySelector("when");
-          if (coordEl && timeEl) {
-            const [lng, lat] = coordEl.textContent.trim().split(",").map(Number);
-            const time = new Date(timeEl.textContent.trim());
-            const mile = calculateMileForCoord(lng, lat);
-            trackHistory.push({ time, mile, lng, lat });
-          }
-        });
+      if (coordEl && timeEl) {
+        const pointTime = new Date(timeEl.textContent);
 
-        trackHistory.sort((a, b) => a.time - b.time);
+        // Ignore test pings recorded before race start (August 8, 2026 at 5:00 AM MDT)
+        if (pointTime < new Date('2026-08-08T05:00:00-06:00')) return;
 
-        if (trackHistory.length > 0) {
-            const latest = trackHistory[trackHistory.length - 1];
-            liveMarker.setLngLat([latest.lng, latest.lat]).addTo(map);
-            updateElevationMarker(latest);
+        const coords = coordEl.textContent.trim().split(",");
+        const lng = parseFloat(coords[0]);
+        const lat = parseFloat(coords[1]);
+
+        if (!isNaN(lng) && !isNaN(lat)) {
+          const mile = calculateMileForCoord(lat, lng);
+          trackHistory.push({
+            time: pointTime,
+            mile: mile,
+            lng: lng,
+            lat: lat
+          });
         }
-      } catch (error) {
-        console.error("Garmin KML fetch error:", error);
+      }
+    });
+
+    // Sort pings chronologically
+    trackHistory.sort((a, b) => a.time - b.time);
+
+    if (trackHistory.length > 0) {
+      const latest = trackHistory[trackHistory.length - 1];
+      if (liveMarker) {
+        liveMarker.setLngLat([latest.lng, latest.lat]);
+      }
+      updateElevationMarker(latest);
+    } else {
+      // Display clean initial state until first post-start ping comes in
+      const statusEl = document.getElementById("lastUpdate");
+      if (statusEl) {
+        statusEl.textContent = "Waiting for InReach...";
       }
     }
-
+  } catch (err) {
+    console.error("Error fetching Garmin feed:", err);
+  }
+}
     function calculateMileForCoord(lng, lat) {
         let minDist = Infinity;
         let closestIndex = 0;
