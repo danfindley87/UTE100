@@ -273,6 +273,13 @@
       }
     };
 
+    function distance(a, b) {
+      const R = 6371000; const toRad = x => x * Math.PI / 180;
+      const dLat = toRad(b[1] - a[1]); const dLon = toRad(b[0] - a[0]);
+      const x = dLon * Math.cos((toRad(a[1]) + toRad(b[1])) / 2);
+      return Math.sqrt(x * x + dLat * dLat) * R;
+    }
+
     function removeElevationSpikes(data, windowSize = 25) {
       let result = [];
       let half = Math.floor(windowSize / 2);
@@ -300,89 +307,279 @@
       return result;
     }
 
-    map.on('load', async () => {
-      await initCourse(); 
-      setupUIControls();
-      preloadRadarLayers(); 
-      updateRadarVisibility(false);
+    function calculateMileForCoord(lng, lat) {
+      let minDist = Infinity;
+      let closestIndex = 0;
+      for (let i = 0; i < coursePoints.length; i++) {
+        const d = distance([lng, lat], coursePoints[i]);
+        if (d < minDist) { minDist = d; closestIndex = i; }
+      }
+      let traveledDist = 0;
+      for (let i = 1; i <= closestIndex; i++) {
+        traveledDist += distance(coursePoints[i - 1], coursePoints[i]);
+      }
+      return traveledDist / 1609.34;
+    }
+
+    function interpolateArrivalTime(targetMile) {
+      if (trackHistory.length === 0) return null;
+      let pingBefore = null;
+      let pingAfter = null;
+
+      for (let i = 0; i < trackHistory.length; i++) {
+        if (trackHistory[i].mile <= targetMile) pingBefore = trackHistory[i];
+        if (trackHistory[i].mile >= targetMile && !pingAfter) pingAfter = trackHistory[i];
+      }
+
+      if (pingBefore && !pingAfter) return pingBefore.time; 
+      if (!pingBefore && pingAfter) return RACE_START_TIME; 
       
-      const currentHour = new Date().getHours();
-      if (currentHour >= 20 || currentHour < 6) {
-        document.getElementById('toggleNight').click();
+      if (pingBefore && pingAfter) {
+        if (pingBefore.mile === pingAfter.mile) return pingBefore.time;
+        const ratio = (targetMile - pingBefore.mile) / (pingAfter.mile - pingBefore.mile);
+        const timeDiffMs = pingAfter.time.getTime() - pingBefore.time.getTime();
+        return new Date(pingBefore.time.getTime() + (timeDiffMs * ratio));
       }
+      return null;
+    }
 
-      async function fetchGarminLocation() {
-  const CORS_PROXY = "https://blue-bird-7fdf.climberdf.workers.dev/?url=";
-  
-  try {
-    const response = await fetch(`${CORS_PROXY}${GARMIN_FEED}`);
-    if (!response.ok) throw new Error(`HTTP status: ${response.status}`);
-    
-    const kmlText = await response.text();
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(kmlText, "application/xml");
+    function formatPace(minsPerMile) {
+      if (!minsPerMile || minsPerMile < 0 || minsPerMile > 100) return "--";
+      const m = Math.floor(minsPerMile);
+      const s = Math.floor((minsPerMile - m) * 60);
+      return `${m}:${s.toString().padStart(2, '0')}/mi`;
+    }
 
-    const placemarks = Array.from(xmlDoc.querySelectorAll("Placemark"));
-    trackHistory = [];
+    function formatTime(dateObj) {
+      if (!dateObj) return "--";
+      let ampm = dateObj.getHours() >= 12 ? 'PM' : 'AM';
+      let hrs = dateObj.getHours() % 12 || 12;
+      let mins = dateObj.getMinutes().toString().padStart(2, '0');
+      return `${hrs}:${mins} ${ampm}`;
+    }
 
-    placemarks.forEach(pm => {
-      const timeEl = pm.querySelector("TimeStamp when") || pm.querySelector("when");
-      const coordEl = pm.querySelector("Point coordinates");
+    function buildPacingTable(latestUpdate) {
+      const tbody = document.getElementById('aidTableBody');
+      tbody.innerHTML = '';
+      const currentMile = latestUpdate.mile || 0;
 
-      if (coordEl && timeEl) {
-        const pointTime = new Date(timeEl.textContent);
+      let previousActualTime = RACE_START_TIME;
 
-        // Ignore test pings recorded before race start (August 8, 2026 at 5:00 AM MDT)
-        if (pointTime < new Date('2026-08-08T05:00:00-06:00')) return;
+      aidStations.forEach((st, idx) => {
+        const row = document.createElement('tr');
+        
+        let statusClass = '';
+        let hasPassed = currentMile >= st.targetMile && st.targetMile > 0;
+        let isNext = currentMile < st.targetMile && (idx === 0 || currentMile >= aidStations[idx-1].targetMile);
 
-        const coords = coordEl.textContent.trim().split(",");
-        const lng = parseFloat(coords[0]);
-        const lat = parseFloat(coords[1]);
+        if (hasPassed) statusClass = 'status-passed';
+        else if (isNext) statusClass = 'status-next';
 
-        if (!isNaN(lng) && !isNaN(lat)) {
-          const mile = calculateMileForCoord(lat, lng);
-          trackHistory.push({
-            time: pointTime,
-            mile: mile,
-            lng: lng,
-            lat: lat
-          });
+        let planTimeStr = st.legMi > 0 ? `${Math.floor(st.planMins/60)}h ${Math.floor(st.planMins%60).toString().padStart(2, '0')}m` : "--";
+        const planPaceStr = st.legMi > 0 ? formatPace(st.planMins / st.legMi) : "--";
+
+        let actualTime = null;
+        let actualPaceStr = "--";
+        let displayEta = "--";
+        let legTimeStr = "--";
+
+        if (st.targetMile === 0) {
+          actualTime = RACE_START_TIME;
+          displayEta = formatTime(actualTime);
+        } else if (hasPassed) {
+          actualTime = interpolateArrivalTime(st.targetMile);
+          displayEta = `Act: ${formatTime(actualTime)}`;
+          if (actualTime && previousActualTime && st.legMi > 0) {
+            const legMins = (actualTime - previousActualTime) / 60000;
+            legTimeStr = `${Math.floor(legMins/60)}h ${Math.floor(legMins%60).toString().padStart(2, '0')}m`;
+            actualPaceStr = formatPace(legMins / st.legMi);
+          }
+        } else if (latestUpdate.time) {
+          let futureMins = 0;
+          if (isNext) {
+            const remainingLegMi = st.targetMile - currentMile;
+            const pace = st.planMins / st.legMi; 
+            futureMins += (remainingLegMi * pace);
+          } else {
+            let currentLegIdx = aidStations.findIndex(a => a.targetMile > currentMile);
+            let currentLeg = aidStations[currentLegIdx];
+            let currentLegRem = currentLeg.targetMile - currentMile;
+            futureMins += (currentLegRem * (currentLeg.planMins / currentLeg.legMi));
+
+            for (let j = currentLegIdx + 1; j <= idx; j++) {
+              futureMins += aidStations[j].planMins;
+            }
+          }
+          
+          const projDate = new Date(latestUpdate.time.getTime() + futureMins * 60000);
+          let day = projDate.getDate();
+          displayEta = `Proj: Aug ${day}, ${formatTime(projDate)}`;
+        } else {
+          displayEta = "Waiting...";
         }
-      }
-    });
 
-    // Sort pings chronologically
-    trackHistory.sort((a, b) => a.time - b.time);
+        if (actualTime) previousActualTime = actualTime;
+        if (idx === aidStations.length - 1) document.getElementById('estFinish').textContent = `Finish ETA: ${displayEta.replace('Proj: ', '').replace('Act: ', '')}`;
 
-    if (trackHistory.length > 0) {
-      const latest = trackHistory[trackHistory.length - 1];
-      if (liveMarker) {
-        liveMarker.setLngLat([latest.lng, latest.lat]);
+        const navLink = st.coords ? `<br><a href="https://www.google.com/maps/dir/?api=1&destination=${st.coords[1]},${st.coords[0]}" target="_blank" class="nav-link-btn">🧭 Navigate</a>` : '';
+        const gainLoss = st.gain && st.loss ? `<br><span style="color:#2e7d32">${st.gain}</span> / <span style="color:#c62828">${st.loss}</span>` : "";
+
+        row.className = statusClass;
+        row.innerHTML = `
+          <td><strong>${st.name}</strong>${navLink}</td>
+          <td>${st.targetMile}</td>
+          <td><strong>${st.legMi} mi</strong>${gainLoss}</td>
+          <td>${planTimeStr}<br><strong>${st.planEta}</strong></td>
+          <td>${legTimeStr}<br><strong>${displayEta}</strong></td>
+          <td>Plan: ${planPaceStr}<br>Act: ${actualPaceStr}</td>
+          <td>${st.notes}</td>
+        `;
+
+        row.addEventListener('click', (e) => {
+          if (e.target.classList.contains('nav-link-btn')) return;
+          
+          document.querySelectorAll('#aidTableBody tr').forEach(r => r.classList.remove('selected-row'));
+          row.classList.add('selected-row');
+
+          if (st.coords) {
+            map.flyTo({ center: st.coords, zoom: 13.5, essential: true });
+            if (window.activeStationPopup) window.activeStationPopup.remove();
+            window.activeStationPopup = new mapboxgl.Popup({ offset: 20, closeOnClick: true })
+              .setLngLat(st.coords)
+              .setHTML(`<div style="text-align:center; font-family:sans-serif; padding:6px 10px;"><strong>📍 ${st.name}</strong><br><span style="font-size:11px; color:#666;">Mile ${st.targetMile} (${st.legMi} mi leg)</span></div>`)
+              .addTo(map);
+          }
+        });
+
+        tbody.appendChild(row);
+      });
+    }
+
+    function updateElevationMarker(latest) {
+      let closestIndex = 0;
+      let minDist = Infinity;
+      for (let i = 0; i < coursePoints.length; i++) {
+        const d = distance([latest.lng, latest.lat], coursePoints[i]);
+        if (d < minDist) { minDist = d; closestIndex = i; }
       }
-      updateElevationMarker(latest);
-    } else {
-      // Display clean initial state until first post-start ping comes in
-      const statusEl = document.getElementById("lastUpdate");
-      if (statusEl) {
-        statusEl.textContent = "Waiting for InReach...";
+
+      let climbed = 0;
+      for (let i = 1; i <= closestIndex; i++) {
+        const gain = elevationData[i] - elevationData[i - 1];
+        if (gain > 0) climbed += gain;
+      }
+
+      const remainMiles = Math.max(0, (totalMiles - latest.mile)).toFixed(1);
+      const currentElev = elevationData[closestIndex].toFixed(0);
+      const climbedFt = Math.round(climbed);
+      const climbRemaining = Math.max(0, totalClimb - climbedFt);
+
+      document.getElementById('mile').textContent = latest.mile.toFixed(1);
+      document.getElementById('elev').textContent = currentElev;
+      document.getElementById('remain').textContent = remainMiles;
+      document.getElementById('climbInfo').textContent = `Climbed: ${climbedFt} ft | To Go: ${climbRemaining} ft`;
+
+      const now = new Date();
+      const ageMins = (now - latest.time) / 60000;
+      const lastUpdateEl = document.getElementById('lastUpdate');
+      lastUpdateEl.textContent = `Location: ${latest.time.toLocaleTimeString()} (${Math.round(ageMins)}m ago)`;
+      
+      lastUpdateEl.classList.remove('stale-warning', 'stale-danger');
+      if (ageMins > 45) {
+        lastUpdateEl.classList.add('stale-danger');
+        lastUpdateEl.textContent += " - SIGNAL DELAYED";
+      } else if (ageMins > 20) {
+        lastUpdateEl.classList.add('stale-warning');
+      }
+
+      if (trackHistory.length > 1) {
+        const latestPing = trackHistory[trackHistory.length - 1];
+        const prevPing = trackHistory[trackHistory.length - 2];
+        const dist = Math.max(0, latestPing.mile - prevPing.mile);
+        const timeDiffMins = (latestPing.time - prevPing.time) / 60000;
+        
+        if (dist > 0.02) { 
+          document.getElementById('averagePace').textContent = `Current Pace: ${formatPace(timeDiffMins / dist)}`;
+        } else if (timeDiffMins > 0) {
+          document.getElementById('averagePace').textContent = `Current Pace: Idle (< 0.02 mi)`;
+        }
+      } else {
+        document.getElementById('averagePace').textContent = `Current Pace: --`;
+      }
+
+      buildPacingTable(latest);
+
+      elevationChart.data.datasets[1] = {
+        label: 'Current Position',
+        data: elevationData.map((val, idx) => idx === closestIndex ? val : null),
+        borderColor: 'red',
+        backgroundColor: 'red',
+        pointRadius: 6,
+        showLine: false
+      };
+      elevationChart.update();
+    }
+
+    function applyMapStyle() {
+      if (isSatellite) map.setStyle('mapbox://styles/mapbox/satellite-streets-v12');
+      else if (isNightMode) map.setStyle('mapbox://styles/mapbox/dark-v11');
+      else map.setStyle('mapbox://styles/mapbox/outdoors-v12');
+    }
+
+    function updatePanels() {
+      const mapEl = document.getElementById('map');
+      const elevEl = document.getElementById('elevationContainer');
+      const tableEl = document.getElementById('tableContainer');
+      const btnElev = document.getElementById('btnElevation');
+      const btnTable = document.getElementById('btnPacing');
+      btnElev.classList.remove('active'); btnTable.classList.remove('active');
+
+      if (activePanel === 'elevation') {
+        mapEl.style.height = '65%'; elevEl.style.height = '35%'; tableEl.style.height = '0%'; btnElev.classList.add('active');
+      } else if (activePanel === 'table') {
+        mapEl.style.height = '50%'; tableEl.style.height = '50%'; elevEl.style.height = '0%'; btnTable.classList.add('active');
+      } else {
+        mapEl.style.height = '100%'; elevEl.style.height = '0%'; tableEl.style.height = '0%';
+      }
+      setTimeout(() => map.resize(), 300);
+    }
+
+    function setupUIControls() {
+      document.getElementById('btnElevation').addEventListener('click', () => { activePanel = activePanel === 'elevation' ? 'none' : 'elevation'; updatePanels(); });
+      document.getElementById('btnPacing').addEventListener('click', () => { activePanel = activePanel === 'table' ? 'none' : 'table'; updatePanels(); });
+      document.getElementById('btnSettings').addEventListener('click', () => { document.getElementById('settingsMenu').style.display = 'flex'; });
+      document.getElementById('closeSettings').addEventListener('click', () => { document.getElementById('settingsMenu').style.display = 'none'; });
+      document.getElementById('toggleRadar').checked = false; 
+      document.getElementById('toggleRadar').addEventListener('change', e => updateRadarVisibility(e.target.checked));
+      document.getElementById('refreshRadar').addEventListener('click', () => { for (let i=0; i<maxRadarLayers; i++) { if (map.getLayer(`radar-layer-${i}`)) { map.removeLayer(`radar-layer-${i}`); map.removeSource(`radar-layer-${i}`); } } preloadRadarLayers(); if (!document.getElementById('toggleRadar').checked) updateRadarVisibility(false); });
+      document.getElementById('radarStrength').addEventListener('input', e => { radarStrength = parseInt(e.target.value, 10); updateRadarVisibility(document.getElementById('toggleRadar').checked); });
+      
+      document.getElementById('toggleNight').addEventListener('click', () => {
+        isNightMode = !isNightMode; document.body.classList.toggle('dark-mode', isNightMode);
+        document.getElementById('toggleNight').innerHTML = isNightMode ? '☀️ Day Mode' : '🌙 Night Mode';
+        applyMapStyle();
+        if (elevationChart) { elevationChart.options.scales.x.ticks.color = isNightMode ? '#ccc' : '#666'; elevationChart.options.scales.y.ticks.color = isNightMode ? '#ccc' : '#666'; elevationChart.update(); }
+      });
+      document.getElementById('toggleSat').addEventListener('click', () => { isSatellite = !isSatellite; document.getElementById('toggleSat').innerHTML = isSatellite ? '🗺️ Map View' : '🛰️ Satellite View'; applyMapStyle(); });
+      document.getElementById('zoomRunner').addEventListener('click', () => { const runnerPos = liveMarker.getLngLat(); map.flyTo({ center: runnerPos, zoom: 14 }); document.getElementById('settingsMenu').style.display = 'none'; });
+      document.getElementById('zoomCourse').addEventListener('click', () => { if (courseBounds) map.fitBounds(courseBounds, { padding: 40 }); document.getElementById('settingsMenu').style.display = 'none'; });
+    }
+
+    function preloadRadarLayers() {
+      if (!map.isStyleLoaded()) return;
+      for (let i = 0; i < maxRadarLayers; i++) {
+        const layerId = `radar-layer-${i}`;
+        if (!map.getSource(layerId)) {
+          map.addSource(layerId, { type: 'raster', tiles: [`https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${OWM_API_KEY}`], tileSize: 256 });
+          map.addLayer({ id: layerId, type: 'raster', source: layerId, paint: { 'raster-opacity': 1.0 }, layout: { visibility: i < radarStrength && document.getElementById('toggleRadar').checked ? 'visible' : 'none' } });
+        }
       }
     }
-  } catch (err) {
-    console.error("Error fetching Garmin feed:", err);
-  }
-}
-    function calculateMileForCoord(lng, lat) {
-        let minDist = Infinity;
-        let closestIndex = 0;
-        for (let i = 0; i < coursePoints.length; i++) {
-            const d = distance([lng, lat], coursePoints[i]);
-            if (d < minDist) { minDist = d; closestIndex = i; }
-        }
-        let traveledDist = 0;
-        for (let i = 1; i <= closestIndex; i++) {
-            traveledDist += distance(coursePoints[i - 1], coursePoints[i]);
-        }
-        return traveledDist / 1609.34;
+
+    function updateRadarVisibility(isVisible = true) {
+      for (let i = 0; i < maxRadarLayers; i++) {
+        if (map.getLayer(`radar-layer-${i}`)) map.setLayoutProperty(`radar-layer-${i}`, 'visibility', (isVisible && i < radarStrength) ? 'visible' : 'none');
+      }
     }
 
     async function initCourse() {
@@ -402,9 +599,9 @@
         const currentMile = totalDist / 1609.34;
         
         aidStations.forEach(station => {
-            if (!station.coords && currentMile >= station.targetMile) {
-                station.coords = [coords[i][0], coords[i][1]];
-            }
+          if (!station.coords && currentMile >= station.targetMile) {
+            station.coords = [coords[i][0], coords[i][1]];
+          }
         });
 
         elevationLabels.push(Number(currentMile.toFixed(1)));
@@ -413,7 +610,7 @@
       }
       
       if (!aidStations[aidStations.length - 1].coords && coursePoints.length > 0) {
-          aidStations[aidStations.length - 1].coords = coursePoints[coursePoints.length - 1];
+        aidStations[aidStations.length - 1].coords = coursePoints[coursePoints.length - 1];
       }
 
       let cleanedElevData = removeElevationSpikes(rawElevData, 25);
@@ -443,7 +640,6 @@
       map.fitBounds(courseBounds, { padding: 40 });
       buildPacingTable({ mile: 0, time: null });
 
-      // Prepare Aid Station Triangle Data for Elevation Profile
       let aidStationElevData = new Array(elevationData.length).fill(null);
       window.aidStationNamesMap = {};
       aidStations.forEach(st => {
@@ -527,275 +723,93 @@
       });
     }
 
-    function interpolateArrivalTime(targetMile) {
-      if (trackHistory.length === 0) return null;
-      let pingBefore = null;
-      let pingAfter = null;
-
-      for (let i = 0; i < trackHistory.length; i++) {
-        if (trackHistory[i].mile <= targetMile) pingBefore = trackHistory[i];
-        if (trackHistory[i].mile >= targetMile && !pingAfter) pingAfter = trackHistory[i];
-      }
-
-      if (pingBefore && !pingAfter) return pingBefore.time; 
-      if (!pingBefore && pingAfter) return RACE_START_TIME; 
+    async function fetchGarminLocation() {
+      const CORS_PROXY = "https://blue-bird-7fdf.climberdf.workers.dev/?url=";
       
-      if (pingBefore && pingAfter) {
-          if (pingBefore.mile === pingAfter.mile) return pingBefore.time;
-          const ratio = (targetMile - pingBefore.mile) / (pingAfter.mile - pingBefore.mile);
-          const timeDiffMs = pingAfter.time.getTime() - pingBefore.time.getTime();
-          return new Date(pingBefore.time.getTime() + (timeDiffMs * ratio));
-      }
-      return null;
-    }
-
-    function formatPace(minsPerMile) {
-        if (!minsPerMile || minsPerMile < 0 || minsPerMile > 100) return "--";
-        const m = Math.floor(minsPerMile);
-        const s = Math.floor((minsPerMile - m) * 60);
-        return `${m}:${s.toString().padStart(2, '0')}/mi`;
-    }
-
-    function formatTime(dateObj) {
-        if (!dateObj) return "--";
-        let ampm = dateObj.getHours() >= 12 ? 'PM' : 'AM';
-        let hrs = dateObj.getHours() % 12 || 12;
-        let mins = dateObj.getMinutes().toString().padStart(2, '0');
-        return `${hrs}:${mins} ${ampm}`;
-    }
-
-    function buildPacingTable(latestUpdate) {
-      const tbody = document.getElementById('aidTableBody');
-      tbody.innerHTML = '';
-      const currentMile = latestUpdate.mile || 0;
-
-      let previousActualTime = RACE_START_TIME;
-
-      aidStations.forEach((st, idx) => {
-        const row = document.createElement('tr');
+      try {
+        const response = await fetch(`${CORS_PROXY}${GARMIN_FEED}`);
+        if (!response.ok) throw new Error(`HTTP status: ${response.status}`);
         
-        let statusClass = '';
-        let hasPassed = currentMile >= st.targetMile && st.targetMile > 0;
-        let isNext = currentMile < st.targetMile && (idx === 0 || currentMile >= aidStations[idx-1].targetMile);
+        const kmlText = await response.text();
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(kmlText, "application/xml");
 
-        if (hasPassed) statusClass = 'status-passed';
-        else if (isNext) statusClass = 'status-next';
+        const placemarks = Array.from(xmlDoc.querySelectorAll("Placemark"));
+        trackHistory = [];
 
-        let planTimeStr = st.legMi > 0 ? `${Math.floor(st.planMins/60)}h ${Math.floor(st.planMins%60).toString().padStart(2, '0')}m` : "--";
-        const planPaceStr = st.legMi > 0 ? formatPace(st.planMins / st.legMi) : "--";
+        placemarks.forEach(pm => {
+          const timeEl = pm.querySelector("TimeStamp when") || pm.querySelector("when");
+          const coordEl = pm.querySelector("Point coordinates");
 
-        let actualTime = null;
-        let actualPaceStr = "--";
-        let displayEta = "--";
-        let legTimeStr = "--";
+          if (coordEl && timeEl) {
+            const pointTime = new Date(timeEl.textContent);
 
-        if (st.targetMile === 0) {
-            actualTime = RACE_START_TIME;
-            displayEta = formatTime(actualTime);
-        } else if (hasPassed) {
-            actualTime = interpolateArrivalTime(st.targetMile);
-            displayEta = `Act: ${formatTime(actualTime)}`;
-            if (actualTime && previousActualTime && st.legMi > 0) {
-                const legMins = (actualTime - previousActualTime) / 60000;
-                legTimeStr = `${Math.floor(legMins/60)}h ${Math.floor(legMins%60).toString().padStart(2, '0')}m`;
-                actualPaceStr = formatPace(legMins / st.legMi);
+            // RACE DAY FILTER: Ignores points recorded before Aug 8, 2026 at 5:00 AM MDT
+            // (To test with older points right now, add // in front of the next line)
+            if (pointTime < new Date('2026-08-08T05:00:00-06:00')) return;
+
+            const coords = coordEl.textContent.trim().split(",");
+            const lng = parseFloat(coords[0]);
+            const lat = parseFloat(coords[1]);
+
+            if (!isNaN(lng) && !isNaN(lat)) {
+              const mile = calculateMileForCoord(lat, lng);
+              trackHistory.push({
+                time: pointTime,
+                mile: mile,
+                lng: lng,
+                lat: lat
+              });
             }
-        } else if (latestUpdate.time) {
-            let futureMins = 0;
-            if (isNext) {
-                const remainingLegMi = st.targetMile - currentMile;
-                const pace = st.planMins / st.legMi; 
-                futureMins += (remainingLegMi * pace);
-            } else {
-                let currentLegIdx = aidStations.findIndex(a => a.targetMile > currentMile);
-                let currentLeg = aidStations[currentLegIdx];
-                let currentLegRem = currentLeg.targetMile - currentMile;
-                futureMins += (currentLegRem * (currentLeg.planMins / currentLeg.legMi));
-
-                for (let j = currentLegIdx + 1; j <= idx; j++) {
-                    futureMins += aidStations[j].planMins;
-                }
-            }
-            
-            const projDate = new Date(latestUpdate.time.getTime() + futureMins * 60000);
-            let day = projDate.getDate();
-            displayEta = `Proj: Aug ${day}, ${formatTime(projDate)}`;
-        } else {
-            displayEta = "Waiting...";
-        }
-
-        if (actualTime) previousActualTime = actualTime;
-        if (idx === aidStations.length - 1) document.getElementById('estFinish').textContent = `Finish ETA: ${displayEta.replace('Proj: ', '').replace('Act: ', '')}`;
-
-        const navLink = st.coords ? `<br><a href="https://www.google.com/maps/dir/?api=1&destination=${st.coords[1]},${st.coords[0]}" target="_blank" class="nav-link-btn">🧭 Navigate</a>` : '';
-        const gainLoss = st.gain && st.loss ? `<br><span style="color:#2e7d32">${st.gain}</span> / <span style="color:#c62828">${st.loss}</span>` : "";
-
-        row.className = statusClass;
-        row.innerHTML = `
-          <td><strong>${st.name}</strong>${navLink}</td>
-          <td>${st.targetMile}</td>
-          <td><strong>${st.legMi} mi</strong>${gainLoss}</td>
-          <td>${planTimeStr}<br><strong>${st.planEta}</strong></td>
-          <td>${legTimeStr}<br><strong>${displayEta}</strong></td>
-          <td>Plan: ${planPaceStr}<br>Act: ${actualPaceStr}</td>
-          <td>${st.notes}</td>
-        `;
-
-        // Interactive Table Row Click Handler -> Highlight Row & Fly to Map Station
-        row.addEventListener('click', (e) => {
-          if (e.target.classList.contains('nav-link-btn')) return;
-          
-          document.querySelectorAll('#aidTableBody tr').forEach(r => r.classList.remove('selected-row'));
-          row.classList.add('selected-row');
-
-          if (st.coords) {
-            map.flyTo({ center: st.coords, zoom: 13.5, essential: true });
-            if (window.activeStationPopup) window.activeStationPopup.remove();
-            window.activeStationPopup = new mapboxgl.Popup({ offset: 20, closeOnClick: true })
-              .setLngLat(st.coords)
-              .setHTML(`<div style="text-align:center; font-family:sans-serif; padding:6px 10px;"><strong>📍 ${st.name}</strong><br><span style="font-size:11px; color:#666;">Mile ${st.targetMile} (${st.legMi} mi leg)</span></div>`)
-              .addTo(map);
           }
         });
 
-        tbody.appendChild(row);
-      });
-    }
+        trackHistory.sort((a, b) => a.time - b.time);
 
-    function updateElevationMarker(latest) {
-      let closestIndex = 0;
-      let minDist = Infinity;
-      for (let i = 0; i < coursePoints.length; i++) {
-        const d = distance([latest.lng, latest.lat], coursePoints[i]);
-        if (d < minDist) { minDist = d; closestIndex = i; }
-      }
-
-      let climbed = 0;
-      for (let i = 1; i <= closestIndex; i++) {
-        const gain = elevationData[i] - elevationData[i - 1];
-        if (gain > 0) climbed += gain;
-      }
-
-      const remainMiles = Math.max(0, (totalMiles - latest.mile)).toFixed(1);
-      const currentElev = elevationData[closestIndex].toFixed(0);
-      const climbedFt = Math.round(climbed);
-      const climbRemaining = Math.max(0, totalClimb - climbedFt);
-
-      document.getElementById('mile').textContent = latest.mile.toFixed(1);
-      document.getElementById('elev').textContent = currentElev;
-      document.getElementById('remain').textContent = remainMiles;
-      document.getElementById('climbInfo').textContent = `Climbed: ${climbedFt} ft | To Go: ${climbRemaining} ft`;
-
-      const now = new Date();
-      const ageMins = (now - latest.time) / 60000;
-      const lastUpdateEl = document.getElementById('lastUpdate');
-      lastUpdateEl.textContent = `Location: ${latest.time.toLocaleTimeString()} (${Math.round(ageMins)}m ago)`;
-      
-      lastUpdateEl.classList.remove('stale-warning', 'stale-danger');
-      if (ageMins > 45) {
-          lastUpdateEl.classList.add('stale-danger');
-          lastUpdateEl.textContent += " - SIGNAL DELAYED";
-      } else if (ageMins > 20) {
-          lastUpdateEl.classList.add('stale-warning');
-      }
-
-      if (trackHistory.length > 1) {
-          const latestPing = trackHistory[trackHistory.length - 1];
-          const prevPing = trackHistory[trackHistory.length - 2];
-          const dist = Math.max(0, latestPing.mile - prevPing.mile);
-          const timeDiffMins = (latestPing.time - prevPing.time) / 60000;
-          
-          if (dist > 0.02) { 
-              document.getElementById('averagePace').textContent = `Current Pace: ${formatPace(timeDiffMins / dist)}`;
-          } else if (timeDiffMins > 0) {
-              document.getElementById('averagePace').textContent = `Current Pace: Idle (< 0.02 mi)`;
+        if (trackHistory.length > 0) {
+          const latest = trackHistory[trackHistory.length - 1];
+          if (liveMarker) {
+            liveMarker.setLngLat([latest.lng, latest.lat]);
           }
-      } else {
-          document.getElementById('averagePace').textContent = `Current Pace: --`;
-      }
-
-      buildPacingTable(latest);
-
-      // Only update Dataset 1 (Current Position dot) so Aid Stations (Dataset 2) remain untouched
-      elevationChart.data.datasets[1] = {
-        label: 'Current Position',
-        data: elevationData.map((val, idx) => idx === closestIndex ? val : null),
-        borderColor: 'red',
-        backgroundColor: 'red',
-        pointRadius: 6,
-        showLine: false
-      };
-      elevationChart.update();
-    }
-
-    function applyMapStyle() {
-      if (isSatellite) map.setStyle('mapbox://styles/mapbox/satellite-streets-v12');
-      else if (isNightMode) map.setStyle('mapbox://styles/mapbox/dark-v11');
-      else map.setStyle('mapbox://styles/mapbox/outdoors-v12');
-    }
-
-    function updatePanels() {
-      const mapEl = document.getElementById('map');
-      const elevEl = document.getElementById('elevationContainer');
-      const tableEl = document.getElementById('tableContainer');
-      const btnElev = document.getElementById('btnElevation');
-      const btnTable = document.getElementById('btnPacing');
-      btnElev.classList.remove('active'); btnTable.classList.remove('active');
-
-      if (activePanel === 'elevation') {
-        mapEl.style.height = '65%'; elevEl.style.height = '35%'; tableEl.style.height = '0%'; btnElev.classList.add('active');
-      } else if (activePanel === 'table') {
-        mapEl.style.height = '50%'; tableEl.style.height = '50%'; elevEl.style.height = '0%'; btnTable.classList.add('active');
-      } else {
-        mapEl.style.height = '100%'; elevEl.style.height = '0%'; tableEl.style.height = '0%';
-      }
-      setTimeout(() => map.resize(), 300);
-    }
-
-    function setupUIControls() {
-      document.getElementById('btnElevation').addEventListener('click', () => { activePanel = activePanel === 'elevation' ? 'none' : 'elevation'; updatePanels(); });
-      document.getElementById('btnPacing').addEventListener('click', () => { activePanel = activePanel === 'table' ? 'none' : 'table'; updatePanels(); });
-      document.getElementById('btnSettings').addEventListener('click', () => { document.getElementById('settingsMenu').style.display = 'flex'; });
-      document.getElementById('closeSettings').addEventListener('click', () => { document.getElementById('settingsMenu').style.display = 'none'; });
-      document.getElementById('toggleRadar').checked = false; 
-      document.getElementById('toggleRadar').addEventListener('change', e => updateRadarVisibility(e.target.checked));
-      document.getElementById('refreshRadar').addEventListener('click', () => { for (let i=0; i<maxRadarLayers; i++) { if (map.getLayer(`radar-layer-${i}`)) { map.removeLayer(`radar-layer-${i}`); map.removeSource(`radar-layer-${i}`); } } preloadRadarLayers(); if (!document.getElementById('toggleRadar').checked) updateRadarVisibility(false); });
-      document.getElementById('radarStrength').addEventListener('input', e => { radarStrength = parseInt(e.target.value, 10); updateRadarVisibility(document.getElementById('toggleRadar').checked); });
-      
-      document.getElementById('toggleNight').addEventListener('click', () => {
-        isNightMode = !isNightMode; document.body.classList.toggle('dark-mode', isNightMode);
-        document.getElementById('toggleNight').innerHTML = isNightMode ? '☀️ Day Mode' : '🌙 Night Mode';
-        applyMapStyle();
-        if (elevationChart) { elevationChart.options.scales.x.ticks.color = isNightMode ? '#ccc' : '#666'; elevationChart.options.scales.y.ticks.color = isNightMode ? '#ccc' : '#666'; elevationChart.update(); }
-      });
-      document.getElementById('toggleSat').addEventListener('click', () => { isSatellite = !isSatellite; document.getElementById('toggleSat').innerHTML = isSatellite ? '🗺️ Map View' : '🛰️ Satellite View'; applyMapStyle(); });
-      document.getElementById('zoomRunner').addEventListener('click', () => { const runnerPos = liveMarker.getLngLat(); map.flyTo({ center: runnerPos, zoom: 14 }); document.getElementById('settingsMenu').style.display = 'none'; });
-      document.getElementById('zoomCourse').addEventListener('click', () => { if (courseBounds) map.fitBounds(courseBounds, { padding: 40 }); document.getElementById('settingsMenu').style.display = 'none'; });
-    }
-
-    function distance(a, b) {
-      const R = 6371000; const toRad = x => x * Math.PI / 180;
-      const dLat = toRad(b[1] - a[1]); const dLon = toRad(b[0] - a[0]);
-      const x = dLon * Math.cos((toRad(a[1]) + toRad(b[1])) / 2);
-      return Math.sqrt(x * x + dLat * dLat) * R;
-    }
-
-    function preloadRadarLayers() {
-      if (!map.isStyleLoaded()) return;
-      for (let i = 0; i < maxRadarLayers; i++) {
-        const layerId = `radar-layer-${i}`;
-        if (!map.getSource(layerId)) {
-          map.addSource(layerId, { type: 'raster', tiles: [`https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${OWM_API_KEY}`], tileSize: 256 });
-          map.addLayer({ id: layerId, type: 'raster', source: layerId, paint: { 'raster-opacity': 1.0 }, layout: { visibility: i < radarStrength && document.getElementById('toggleRadar').checked ? 'visible' : 'none' } });
+          updateElevationMarker(latest);
+        } else {
+          const statusEl = document.getElementById("lastUpdate");
+          if (statusEl) {
+            statusEl.textContent = "Waiting for InReach...";
+          }
         }
+      } catch (err) {
+        console.error("Error fetching Garmin feed:", err);
       }
     }
 
-    function updateRadarVisibility(isVisible = true) {
-      for (let i = 0; i < maxRadarLayers; i++) {
-        if (map.getLayer(`radar-layer-${i}`)) map.setLayoutProperty(`radar-layer-${i}`, 'visibility', (isVisible && i < radarStrength) ? 'visible' : 'none');
+    map.on('load', async () => {
+      await initCourse(); 
+      setupUIControls();
+      preloadRadarLayers(); 
+      updateRadarVisibility(false);
+      
+      const currentHour = new Date().getHours();
+      if (currentHour >= 20 || currentHour < 6) {
+        document.getElementById('toggleNight').click();
       }
-    }
+
+      fetchGarminLocation();
+      setInterval(fetchGarminLocation, 120000);
+      initialLoadComplete = true;
+    });
+
+    map.on('style.load', () => {
+      if (!initialLoadComplete) return;
+      if (window.courseDataGeoJson && !map.getSource('course')) {
+        map.addSource('course', { type: 'geojson', data: window.courseDataGeoJson });
+        map.addLayer({ id: 'course-line', type: 'line', source: 'course', paint: { 'line-color': '#FF4500', 'line-width': 4, 'line-blur': 1 } });
+        map.addLayer({ id: 'course-arrows', type: 'symbol', source: 'course', layout: { 'symbol-placement': 'line', 'symbol-spacing': 80, 'text-field': '▶', 'text-size': 16, 'text-keep-upright': false }, paint: { 'text-color': '#ffffff', 'text-halo-color': '#FF4500', 'text-halo-width': 1.5 } });
+      }
+      preloadRadarLayers();
+      const radarToggle = document.getElementById('toggleRadar');
+      if (radarToggle) updateRadarVisibility(radarToggle.checked);
+    });
   </script>
 </body>
 </html>
