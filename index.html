@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -769,7 +769,7 @@
         if (trackHistory.length > 0) {
           const latest = trackHistory[trackHistory.length - 1];
           if (liveMarker) {
-            liveMarker.setLngLat([latest.lng, latest.lat]);
+            liveMarker.setLngLat([latest.lng, latest.lat]).addTo(map);
           }
           updateElevationMarker(latest);
         } else {
