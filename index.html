@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -154,7 +154,6 @@
   </div>
 
   <script>
-    // Offline PWA Support
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').then(() => console.log("Offline SW Registered"));
     }
@@ -242,10 +241,8 @@
     let courseBounds;
     let radarStrength = 10;
     const maxRadarLayers = 20;
-
     let trackHistory = []; 
 
-    // Custom Chart.js Plugin to Draw Vertical Aid Station Lines
     const aidStationLinesPlugin = {
       id: 'aidStationLines',
       afterDraw: (chart) => {
@@ -307,10 +304,16 @@
       return result;
     }
 
-    function calculateMileForCoord(lng, lat) {
+    // UPDATED FUNCTION: Limits search based on the last known index to prevent overlapping-course teleportation
+    function calculateMileForCoord(lng, lat, lastIndex = 0) {
       let minDist = Infinity;
-      let closestIndex = 0;
-      for (let i = 0; i < coursePoints.length; i++) {
+      let closestIndex = lastIndex;
+
+      // Only search a window slightly behind and ahead of the runner's last known point
+      let searchStart = Math.max(0, lastIndex - 300);
+      let searchEnd = lastIndex === 0 ? Math.floor(coursePoints.length * 0.25) : Math.min(coursePoints.length, lastIndex + 1500);
+
+      for (let i = searchStart; i < searchEnd; i++) {
         const d = distance([lng, lat], coursePoints[i]);
         if (d < minDist) { minDist = d; closestIndex = i; }
       }
@@ -318,7 +321,7 @@
       for (let i = 1; i <= closestIndex; i++) {
         traveledDist += distance(coursePoints[i - 1], coursePoints[i]);
       }
-      return traveledDist / 1609.34;
+      return { mile: traveledDist / 1609.34, index: closestIndex };
     }
 
     function interpolateArrivalTime(targetMile) {
@@ -362,7 +365,6 @@
       const tbody = document.getElementById('aidTableBody');
       tbody.innerHTML = '';
       const currentMile = latestUpdate.mile || 0;
-
       let previousActualTime = RACE_START_TIME;
 
       aidStations.forEach((st, idx) => {
@@ -405,7 +407,6 @@
             let currentLeg = aidStations[currentLegIdx];
             let currentLegRem = currentLeg.targetMile - currentMile;
             futureMins += (currentLegRem * (currentLeg.planMins / currentLeg.legMi));
-
             for (let j = currentLegIdx + 1; j <= idx; j++) {
               futureMins += aidStations[j].planMins;
             }
@@ -437,10 +438,8 @@
 
         row.addEventListener('click', (e) => {
           if (e.target.classList.contains('nav-link-btn')) return;
-          
           document.querySelectorAll('#aidTableBody tr').forEach(r => r.classList.remove('selected-row'));
           row.classList.add('selected-row');
-
           if (st.coords) {
             map.flyTo({ center: st.coords, zoom: 13.5, essential: true });
             if (window.activeStationPopup) window.activeStationPopup.remove();
@@ -450,7 +449,6 @@
               .addTo(map);
           }
         });
-
         tbody.appendChild(row);
       });
     }
@@ -603,7 +601,6 @@
             station.coords = [coords[i][0], coords[i][1]];
           }
         });
-
         elevationLabels.push(Number(currentMile.toFixed(1)));
         rawElevData.push(coords[i][2] ? coords[i][2] * 3.28084 : 0);
         coursePoints.push([coords[i][0], coords[i][1]]);
@@ -723,6 +720,7 @@
       });
     }
 
+    // UPDATED FUNCTION: Sorts raw pings by time first, then calculates sequential mileage
     async function fetchGarminLocation() {
       const CORS_PROXY = "https://blue-bird-7fdf.climberdf.workers.dev/?url=";
       
@@ -733,19 +731,16 @@
         const kmlText = await response.text();
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(kmlText, "application/xml");
-
         const placemarks = Array.from(xmlDoc.querySelectorAll("Placemark"));
-        trackHistory = [];
 
+        // 1. Gather all pings chronologically
+        let rawPings = [];
         placemarks.forEach(pm => {
           const timeEl = pm.querySelector("TimeStamp when") || pm.querySelector("when");
           const coordEl = pm.querySelector("Point coordinates");
 
           if (coordEl && timeEl) {
             const pointTime = new Date(timeEl.textContent);
-
-            // RACE DAY FILTER: Ignores points recorded before Aug 8, 2026 at 5:00 AM MDT
-            // (To test with older points right now, add // in front of the next line)
             if (pointTime < new Date('2026-08-08T05:00:00-06:00')) return;
 
             const coords = coordEl.textContent.trim().split(",");
@@ -753,18 +748,28 @@
             const lat = parseFloat(coords[1]);
 
             if (!isNaN(lng) && !isNaN(lat)) {
-              const mile = calculateMileForCoord(lat, lng);
-              trackHistory.push({
-                time: pointTime,
-                mile: mile,
-                lng: lng,
-                lat: lat
-              });
+              rawPings.push({ time: pointTime, lng: lng, lat: lat });
             }
           }
         });
 
-        trackHistory.sort((a, b) => a.time - b.time);
+        rawPings.sort((a, b) => a.time - b.time);
+
+        // 2. Loop chronologically through pings to map track progress logically
+        trackHistory = [];
+        let lastKnownIndex = 0; 
+
+        rawPings.forEach(ping => {
+          const result = calculateMileForCoord(ping.lng, ping.lat, lastKnownIndex);
+          lastKnownIndex = result.index; // Move the search window forward
+          
+          trackHistory.push({
+            time: ping.time,
+            mile: result.mile,
+            lng: ping.lng,
+            lat: ping.lat
+          });
+        });
 
         if (trackHistory.length > 0) {
           const latest = trackHistory[trackHistory.length - 1];
